@@ -28,6 +28,7 @@ def main() -> None:
         "--noconfirm", "--clean",
         "--name", EXE_NAME,
         "--add-data", str(ROOT / "server" / "migrations") + ";server/migrations",
+        "--add-data", str(ROOT / "server" / "print_templates") + ";server/print_templates",
         "--add-data", str(ROOT / "frontend" / "dist") + ";frontend/dist",
         str(ROOT / "launcher.py"),
     ]

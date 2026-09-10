@@ -1,0 +1,13 @@
+{% extends "base_a4.html" %}
+{% block body %}
+<div class="doc-title">打印框架测试单</div>
+<p>本单据用于验证 A4 打印框架：抬头取自「系统设置 → 诊所信息」，版式统一，后续的患者信息表、
+处方笺、销售单、收费凭证、出院清单等均复用此框架。</p>
+<table class="grid">
+  <tr><th style="width:30%">项目</th><th>内容</th></tr>
+  <tr><td>单据模板</td><td>{{ template_note or "test_sheet" }}</td></tr>
+  <tr><td>示例文本一</td><td>六味地黄丸　×2 瓶</td></tr>
+  <tr><td>示例文本二</td><td>针灸　×1 次</td></tr>
+  <tr><td>示例金额</td><td>￥ 86.50</td></tr>
+</table>
+{% endblock %}

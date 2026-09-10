@@ -45,6 +45,12 @@ def frontend_dir() -> Path:
     return app_root() / "frontend" / "dist"
 
 
+def print_templates_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "server" / "print_templates"  # noqa: SLF001
+    return Path(__file__).resolve().parent / "print_templates"
+
+
 def ensure_dirs() -> None:
     for d in (data_dir(), backup_dir(), log_dir()):
         d.mkdir(parents=True, exist_ok=True)

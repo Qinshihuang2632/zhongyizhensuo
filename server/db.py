@@ -53,8 +53,32 @@ def one(sql: str, params: tuple = ()) -> sqlite3.Row | None:
     return connect().execute(sql, params).fetchone()
 
 
+def get_setting(key: str, default: str | None = None) -> str | None:
+    row = one("SELECT value FROM settings WHERE key = ?", (key,))
+    return row["value"] if row else default
+
+
+def set_setting(key: str, value: str) -> None:
+    with tx() as conn:
+        conn.execute(
+            "INSERT INTO settings(key, value) VALUES(?, ?)"
+            " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, str(value)),
+        )
+
+
 def migrate() -> None:
-    """按文件名序号依次执行 server/migrations/*.sql，已应用的不重复执行。"""
+    """启动入口：先处理待恢复（起服务前完成数据库替换），再执行迁移。"""
+    from . import backup  # 局部导入，避免与 backup.py 的顶层导入成环
+
+    paths.ensure_dirs()
+    try:
+        restored = backup.apply_pending_restore()
+        if restored:
+            logger.info("已完成数据恢复，所用备份：%s", restored)
+    except Exception:
+        logger.exception("执行待恢复失败，跳过（原数据保持不变）")
+
     conn = connect()
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_version ("
