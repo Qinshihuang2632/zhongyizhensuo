@@ -129,7 +129,7 @@
 
     <!-- 协定处方新增/修改 -->
     <el-dialog v-model="formulaDialog" :title="formulaForm.id ? '修改协定处方' : '新增协定处方'" width="640px">
-      <el-form label-width="90px">
+      <el-form v-if="formulaForm" label-width="90px">
         <el-row :gutter="12">
           <el-col :span="12"><el-form-item label="方名" required><el-input v-model="formulaForm.name" maxlength="50" /></el-form-item></el-col>
           <el-col :span="12">
@@ -141,7 +141,7 @@
         <el-form-item label="组成">
           <div style="width:100%">
             <div v-for="(l, i) in formulaForm.lines" :key="i" class="fline">
-              <ItemSelect v-model="l.item_id" style="flex:1" @change="() => {}" />
+              <ItemSelect v-model="l.item_id" :categories="['中药饮片', '中成药', '西药']" style="flex:1" @change="() => {}" />
               <el-input-number v-model="l.qty" :min="0.01" :max="9999" :step="1" size="small" style="width:110px" />
               <span class="famount">{{ ((itemPrice(l.item_id) || 0) * (l.qty || 0)).toFixed(2) }}元</span>
               <el-button size="small" type="danger" plain :icon="'Delete'" @click="formulaForm.lines.splice(i, 1)" />
@@ -251,7 +251,8 @@ const formulaKw = ref('')
 const formulaLoading = ref(false)
 const formulaDialog = ref(false)
 const formulaSaving = ref(false)
-const formulaForm = ref(null)
+// 不能初始为 null：对话框关闭时其标题等绑定也会求值，null 会导致整个组件渲染崩溃（白屏）
+const formulaForm = ref({ id: 0, name: '', price: 0, note: '', active: true, lines: [] })
 const allDrugs = ref([])
 
 async function loadFormulas() {
