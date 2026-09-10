@@ -28,7 +28,7 @@
         <el-table-column prop="name" label="姓名" width="110" />
         <el-table-column prop="gender" label="性别" width="60" />
         <el-table-column label="年龄" width="60">
-          <template #default="{ row }">{{ ageOf(row.birth_date) }}</template>
+          <template #default="{ row }">{{ ageOf(row.birth_date) || row.age || '' }}</template>
         </el-table-column>
         <el-table-column prop="phone" label="电话" width="130" />
         <el-table-column prop="address" label="地址" min-width="140" show-overflow-tooltip />
@@ -54,26 +54,29 @@
 
     <!-- 新增 / 修改 -->
     <el-dialog v-model="dialogVisible" :title="form.id ? '修改患者' : '新增患者'" width="560px">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-row :gutter="12">
           <el-col :span="12"><el-form-item label="姓名" prop="name"><el-input v-model="form.name" maxlength="50" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="电话" prop="phone"><el-input v-model="form.phone" maxlength="20" /></el-form-item></el-col>
+        </el-row>
+        <el-row :gutter="12">
           <el-col :span="12">
-            <el-form-item label="性别">
+            <el-form-item label="性别" prop="gender">
               <el-radio-group v-model="form.gender">
                 <el-radio value="男">男</el-radio>
                 <el-radio value="女">女</el-radio>
               </el-radio-group>
             </el-form-item>
           </el-col>
-        </el-row>
-        <el-row :gutter="12">
           <el-col :span="12">
-            <el-form-item label="出生日期">
-              <el-date-picker v-model="form.birth_date" type="date" value-format="YYYY-MM-DD" style="width:100%" />
+            <el-form-item label="年龄" prop="age">
+              <el-input-number v-model="form.age" :min="1" :max="130" style="width:100%" />
             </el-form-item>
           </el-col>
-          <el-col :span="12"><el-form-item label="电话"><el-input v-model="form.phone" maxlength="20" /></el-form-item></el-col>
         </el-row>
+        <el-form-item label="出生日期">
+          <el-date-picker v-model="form.birth_date" type="date" value-format="YYYY-MM-DD" placeholder="选填" style="width:100%" />
+        </el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" maxlength="100" /></el-form-item>
         <el-form-item label="过敏史"><el-input v-model="form.allergy_history" type="textarea" :rows="2" maxlength="500" /></el-form-item>
         <el-form-item label="既往史"><el-input v-model="form.medical_history" type="textarea" :rows="2" maxlength="500" /></el-form-item>
@@ -108,13 +111,16 @@ const printVisible = ref(false)
 const printHtml = ref('')
 
 const emptyForm = () => ({
-  id: 0, name: '', gender: '', birth_date: '', phone: '',
+  id: 0, name: '', gender: '', age: null, birth_date: '', phone: '',
   address: '', allergy_history: '', medical_history: '', note: '',
 })
 const form = reactive(emptyForm())
 
 const rules = {
   name: [{ required: true, message: '请填写姓名', trigger: 'blur' }],
+  gender: [{ required: true, message: '请选择性别', trigger: 'change' }],
+  age: [{ required: true, message: '请填写年龄', trigger: 'blur' }],
+  phone: [{ required: true, message: '请填写电话', trigger: 'blur' }],
 }
 
 function ageOf(birth) {
@@ -178,7 +184,10 @@ async function printOne(row) {
     const p = await api(`/patients/${row.id}`)
     const { html } = await api('/print/preview', {
       method: 'POST',
-      body: { template: 'patient_info', data: { p: { ...p, age: ageOf(p.birth_date) } } },
+      body: {
+        template: 'patient_info',
+        data: { p: { ...p, age: ageOf(p.birth_date) || p.age } },
+      },
     })
     printHtml.value = html
     printVisible.value = true

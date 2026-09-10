@@ -8,6 +8,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -39,9 +40,17 @@ def main() -> None:
 
     src = ROOT / "dist" / EXE_NAME
     out = ROOT / "dist" / APP_NAME
+    # 重新打包时保留「数据」目录（里面是真实业务数据，绝不随更新丢失）
+    keep = None
     if out.exists():
+        data = out / "数据"
+        if data.is_dir():
+            keep = out.parent / f".数据保留_{int(time.time())}"
+            shutil.move(str(data), str(keep))
         shutil.rmtree(out)
     shutil.copytree(src, out)
+    if keep is not None:
+        shutil.move(str(keep), str(out / "数据"))
     shutil.copy2(ROOT / "版本.json", out / "版本.json")
     shutil.copy2(ROOT / "使用说明.txt", out / "使用说明.txt")
     print(f"\n打包完成：{out}")

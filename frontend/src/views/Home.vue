@@ -71,7 +71,6 @@ const modules = [
   { key: 'disch', label: '办理出院', icon: 'Finished', to: '/' },
   { key: 'print', label: '打印中心', icon: 'Printer', to: '/' },
   { key: 'query', label: '查询中心', icon: 'Search', to: '/' },
-  { key: 'sys', label: '系统设置', icon: 'Setting', to: '/settings', enabled: true },
 ]
 
 const backupWarn = computed(() => {
@@ -108,7 +107,7 @@ async function shutdown() {
 .brand .clinic { font-size: 20px; font-weight: bold; margin-right: 12px; }
 .brand .sub { opacity: .8; font-size: 13px; }
 .content { padding: 24px; flex: 1; }
-.tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
 .tile { height: 110px; border: 1px solid #e4e7ed; border-radius: 12px; background: #fff; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; font-size: 16px; color: #9ca3af; cursor: not-allowed; }
 .tile.enabled { color: #075e54; cursor: pointer; transition: all .15s; }
 .tile.enabled:hover { box-shadow: 0 4px 16px rgba(7,94,84,.18); transform: translateY(-2px); }

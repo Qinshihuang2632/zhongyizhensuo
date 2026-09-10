@@ -1,4 +1,7 @@
-"""患者档案：登记、搜索、修改。编号 = 自增 id 补零显示（如 000012）。"""
+"""患者档案：登记、搜索、修改。编号 = 自增 id 补零显示（如 000012）。
+
+必填：姓名、性别、年龄、电话；出生日期选填（填了则显示时优先按出生日期换算年龄）。
+"""
 import datetime as dt
 
 from fastapi import APIRouter, HTTPException
@@ -8,7 +11,7 @@ from . import db
 
 router = APIRouter(prefix="/api/patients")
 
-_GENDERS = {"", "男", "女"}
+_GENDERS = ("男", "女")
 _LIMITS = {"name": 50, "phone": 20, "address": 100,
            "allergy_history": 500, "medical_history": 500, "note": 500}
 
@@ -16,6 +19,7 @@ _LIMITS = {"name": 50, "phone": 20, "address": 100,
 class PatientBody(BaseModel):
     name: str
     gender: str = ""
+    age: int = 0
     birth_date: str = ""
     phone: str = ""
     address: str = ""
@@ -28,6 +32,7 @@ def _clean(body: PatientBody) -> tuple:
     data = {
         "name": body.name.strip(),
         "gender": body.gender.strip(),
+        "age": body.age,
         "birth_date": body.birth_date.strip(),
         "phone": body.phone.strip(),
         "address": body.address.strip(),
@@ -38,7 +43,11 @@ def _clean(body: PatientBody) -> tuple:
     if not data["name"]:
         raise HTTPException(400, "姓名不能为空")
     if data["gender"] not in _GENDERS:
-        raise HTTPException(400, "性别只能是 男 / 女")
+        raise HTTPException(400, "性别必填（男 / 女）")
+    if not 1 <= data["age"] <= 130:
+        raise HTTPException(400, "年龄必填，范围 1~130")
+    if not data["phone"]:
+        raise HTTPException(400, "电话不能为空")
     if data["birth_date"]:
         try:
             dt.datetime.strptime(data["birth_date"], "%Y-%m-%d")
@@ -46,9 +55,9 @@ def _clean(body: PatientBody) -> tuple:
             raise HTTPException(400, "出生日期格式应为 YYYY-MM-DD") from None
         if data["birth_date"] > dt.date.today().isoformat():
             raise HTTPException(400, "出生日期不能晚于今天")
-    for key, limit in _LIMITS.items():
-        if len(data[key]) > limit:
-            raise HTTPException(400, f"「{key}」长度不能超过 {limit} 字")
+    for key in ("name", "phone", "address", "allergy_history", "medical_history", "note"):
+        if len(data[key]) > _LIMITS[key]:
+            raise HTTPException(400, f"「{key}」长度不能超过 {_LIMITS[key]} 字")
     return tuple(data.values())
 
 
@@ -78,9 +87,9 @@ def create_patient(body: PatientBody):
     values = _clean(body)
     with db.tx() as conn:
         cur = conn.execute(
-            "INSERT INTO patients (name, gender, birth_date, phone, address,"
+            "INSERT INTO patients (name, gender, age, birth_date, phone, address,"
             " allergy_history, medical_history, note)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)", values,
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", values,
         )
         return {"id": cur.lastrowid}
 
@@ -95,10 +104,12 @@ def get_patient(pid: int):
 
 @router.put("/{pid}")
 def update_patient(pid: int, body: PatientBody):
+    if db.one("SELECT id FROM patients WHERE id = ?", (pid,)) is None:
+        raise HTTPException(404, "患者不存在")
     values = _clean(body)
     with db.tx() as conn:
         cur = conn.execute(
-            "UPDATE patients SET name=?, gender=?, birth_date=?, phone=?, address=?,"
+            "UPDATE patients SET name=?, gender=?, age=?, birth_date=?, phone=?, address=?,"
             " allergy_history=?, medical_history=?, note=?,"
             " updated_at=datetime('now','localtime') WHERE id=?", values + (pid,),
         )

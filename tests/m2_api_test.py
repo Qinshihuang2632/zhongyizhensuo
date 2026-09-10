@@ -1,6 +1,7 @@
 """M2 患者档案 API 自测：python tests/m2_api_test.py
 
 前置：服务已启动且数据库为全新（未初始化）。测试自行完成初始化与登录。
+必填项（2026-09 按用户反馈调整）：姓名、性别、年龄、电话；出生日期选填。
 """
 import json
 import sys
@@ -52,7 +53,7 @@ def check(name, cond, detail=""):
 
 
 Zhang = {
-    "name": "张三", "gender": "男", "birth_date": "1980-05-01",
+    "name": "张三", "gender": "男", "age": 46, "birth_date": "1980-05-01",
     "phone": "13800001111", "address": "测试路1号",
     "allergy_history": "青霉素过敏", "medical_history": "高血压", "note": "复诊患者",
 }
@@ -71,14 +72,20 @@ def main():
     r = call("POST", "/api/patients", Zhang)
     pid1 = r.get("id", 0)
     check("创建完整患者", pid1 > 0)
-    r = call("POST", "/api/patients", {"name": "李四"})
+    r = call("POST", "/api/patients", {"name": "李四", "gender": "女", "age": 30, "phone": "13500001234"})
     pid2 = r.get("id", 0)
-    check("创建最小患者", pid2 > pid1)
+    check("创建患者(仅必填项)", pid2 > pid1)
 
+    # 必填校验：姓名/性别/年龄/电话
     call("POST", "/api/patients", {"name": ""}, expect=400)
-    call("POST", "/api/patients", {"name": "王五", "gender": "未知"}, expect=400)
-    call("POST", "/api/patients", {"name": "王五", "birth_date": "1980-13-01"}, expect=400)
-    call("POST", "/api/patients", {"name": "王五", "birth_date": "2999-01-01"}, expect=400)
+    call("POST", "/api/patients", {"name": "王五", "gender": "", "age": 30, "phone": "123"}, expect=400)
+    call("POST", "/api/patients", {"name": "王五", "gender": "未知", "age": 30, "phone": "123"}, expect=400)
+    call("POST", "/api/patients", {"name": "王五", "gender": "男", "age": 0, "phone": "123"}, expect=400)
+    call("POST", "/api/patients", {"name": "王五", "gender": "男", "age": 200, "phone": "123"}, expect=400)
+    call("POST", "/api/patients", {"name": "王五", "gender": "男", "age": 30, "phone": ""}, expect=400)
+    # 出生日期选填但仍校验格式
+    call("POST", "/api/patients", {"name": "王五", "gender": "男", "age": 30, "phone": "123", "birth_date": "1980-13-01"}, expect=400)
+    call("POST", "/api/patients", {"name": "王五", "gender": "男", "age": 30, "phone": "123", "birth_date": "2999-01-01"}, expect=400)
 
     # --- 列表与搜索 ---
     lst = call("GET", "/api/patients")
@@ -95,17 +102,17 @@ def main():
 
     # --- 详情与修改 ---
     p = call("GET", f"/api/patients/{pid1}")
-    check("详情字段一致", p.get("name") == "张三" and p.get("allergy_history") == "青霉素过敏")
+    check("详情字段一致", p.get("name") == "张三" and p.get("allergy_history") == "青霉素过敏" and p.get("age") == 46)
     call("GET", "/api/patients/999999", expect=404)
     call("PUT", f"/api/patients/{pid1}", {**Zhang, "phone": "13900002222", "address": "新路2号"})
     p = call("GET", f"/api/patients/{pid1}")
     check("修改已生效", p.get("phone") == "13900002222" and p.get("address") == "新路2号")
     check("updated_at刷新", p.get("updated_at") >= p.get("created_at"), str(p))
     call("PUT", "/api/patients/999999", {"name": "赵六"}, expect=404)
-    call("PUT", f"/api/patients/{pid1}", {"name": ""}, expect=400)
+    call("PUT", f"/api/patients/{pid1}", {**Zhang, "age": 0}, expect=400)
 
     # --- 打印（数据由前端取好后传入打印框架） ---
-    r = call("POST", "/api/print/preview", {"template": "patient_info", "data": {"p": {**Zhang, "no": f"{pid1:06d}", "age": 46, "created_at": "2026-09-10 17:00"}}})
+    r = call("POST", "/api/print/preview", {"template": "patient_info", "data": {"p": {**Zhang, "no": f"{pid1:06d}", "created_at": "2026-09-10 17:00"}}})
     html = r.get("html", "")
     check("打印含诊所抬头", "测试诊所A" in html)
     check("打印含患者信息", "张三" in html and "青霉素过敏" in html and "0000" in html)
