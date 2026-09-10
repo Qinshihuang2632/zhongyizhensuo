@@ -63,7 +63,7 @@ const backupKeep = ref(30)
 const exited = ref(false)
 
 const modules = [
-  { key: 'reg', label: '信息登记', icon: 'User', to: '/settings' },
+  { key: 'reg', label: '信息登记', icon: 'User', to: '/patients', enabled: true },
   { key: 'item', label: '项目登记', icon: 'List', to: '/' },
   { key: 'sale', label: '药品销售', icon: 'ShoppingCart', to: '/' },
   { key: 'rx', label: '处方开药', icon: 'EditPen', to: '/' },

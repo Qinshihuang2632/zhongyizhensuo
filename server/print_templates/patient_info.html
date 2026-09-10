@@ -1,0 +1,22 @@
+{% extends "base_a4.html" %}
+{% block body %}
+<div class="doc-title">患者信息表</div>
+<table class="grid">
+  <tr>
+    <th style="width:16%">编　号</th><td style="width:34%">{{ p.no }}</td>
+    <th style="width:16%">姓　名</th><td style="width:34%">{{ p.name }}</td>
+  </tr>
+  <tr>
+    <th>性　别</th><td>{{ p.gender or "—" }}</td>
+    <th>出生日期</th><td>{{ p.birth_date or "—" }}{% if p.age %}（{{ p.age }} 岁）{% endif %}</td>
+  </tr>
+  <tr>
+    <th>联系电话</th><td>{{ p.phone or "—" }}</td>
+    <th>建档时间</th><td>{{ p.created_at }}</td>
+  </tr>
+  <tr><th>地　址</th><td colspan="3">{{ p.address or "—" }}</td></tr>
+  <tr><th>过敏史</th><td colspan="3">{{ p.allergy_history or "无" }}</td></tr>
+  <tr><th>既往史</th><td colspan="3">{{ p.medical_history or "无" }}</td></tr>
+  <tr><th>备　注</th><td colspan="3">{{ p.note or "—" }}</td></tr>
+</table>
+{% endblock %}

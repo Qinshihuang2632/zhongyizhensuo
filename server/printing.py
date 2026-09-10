@@ -44,4 +44,7 @@ def render(template: str, data: dict | None = None) -> str:
         "printed_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     ctx.update(data or {})
-    return tpl.render(**ctx)
+    try:
+        return tpl.render(**ctx)
+    except jinja2.TemplateError as e:
+        raise ValueError(f"模板渲染失败：{e}") from None

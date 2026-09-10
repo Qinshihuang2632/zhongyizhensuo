@@ -77,13 +77,7 @@
       </el-tabs>
     </main>
 
-    <el-dialog v-model="printVisible" title="打印预览（A4）" width="82%" top="3vh" destroy-on-close>
-      <iframe ref="printFrame" :srcdoc="printHtml" class="print-frame"></iframe>
-      <template #footer>
-        <el-button @click="printVisible = false">关闭</el-button>
-        <el-button type="primary" :icon="'Printer'" @click="doPrint">打印</el-button>
-      </template>
-    </el-dialog>
+    <PrintPreview v-model:visible="printVisible" :html="printHtml" />
   </div>
 </template>
 
@@ -91,6 +85,7 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
+import PrintPreview from '../components/PrintPreview.vue'
 
 const form = ref({ clinic_name: '', clinic_address: '', clinic_phone: '' })
 const backups = ref([])
@@ -102,7 +97,6 @@ const saving = ref(false)
 const backingUp = ref(false)
 const printVisible = ref(false)
 const printHtml = ref('')
-const printFrame = ref(null)
 
 async function loadAll() {
   const health = await api('/health')
@@ -187,14 +181,6 @@ async function previewTest() {
   printHtml.value = html
   printVisible.value = true
 }
-
-function doPrint() {
-  const win = printFrame.value?.contentWindow
-  if (win) {
-    win.focus()
-    win.print()
-  }
-}
 </script>
 
 <style scoped>
@@ -208,5 +194,4 @@ function doPrint() {
 .rows { display: grid; gap: 10px; font-size: 14px; }
 .rows .k { display: inline-block; width: 90px; color: #888; }
 .mono { font-family: Consolas, monospace; word-break: break-all; }
-.print-frame { width: 100%; height: 70vh; border: 1px solid #ddd; background: #fff; }
 </style>
