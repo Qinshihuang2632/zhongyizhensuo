@@ -1,0 +1,33 @@
+{% extends "base_a4.html" %}
+{% block body %}
+<div class="doc-title">治疗项目单</div>
+<table style="width:100%; margin-bottom:8px; font-size:11pt">
+  <tr>
+    <td>单号：{{ order.no }}</td>
+    <td>对象：{{ order.owner_type }}</td>
+    <td>患者：{{ order.patient_name }}</td>
+    <td style="text-align:right">日期：{{ order.created_at }}</td>
+  </tr>
+</table>
+<table class="grid">
+  <tr>
+    <th style="width:8%">序号</th><th>项目名称</th><th style="width:12%">单位</th>
+    <th style="width:12%">数量</th><th style="width:16%">单价（元）</th><th style="width:16%">金额（元）</th>
+  </tr>
+  {% for l in lines %}
+  <tr>
+    <td style="text-align:center">{{ loop.index }}</td>
+    <td>{{ l.item_name }}</td>
+    <td>{{ l.unit or "—" }}</td>
+    <td style="text-align:center">{{ l.qty | int if l.qty == l.qty | int else l.qty }}</td>
+    <td style="text-align:right">{{ "%.2f" | format(l.price) }}</td>
+    <td style="text-align:right">{{ "%.2f" | format(l.price * l.qty) }}</td>
+  </tr>
+  {% endfor %}
+  <tr>
+    <th colspan="5" style="text-align:right">合　计</th>
+    <th style="text-align:right">{{ "%.2f" | format(order.total) }}</th>
+  </tr>
+</table>
+{% if order.note %}<p style="font-size:11pt">备注：{{ order.note }}</p>{% endif %}
+{% endblock %}

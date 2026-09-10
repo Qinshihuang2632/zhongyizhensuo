@@ -64,7 +64,7 @@ const exited = ref(false)
 
 const modules = [
   { key: 'reg', label: '信息登记', icon: 'User', to: '/patients', enabled: true },
-  { key: 'item', label: '项目登记', icon: 'List', to: '/' },
+  { key: 'item', label: '项目登记', icon: 'List', to: '/treatment-register', enabled: true },
   { key: 'sale', label: '药品销售', icon: 'ShoppingCart', to: '/' },
   { key: 'rx', label: '处方开药', icon: 'EditPen', to: '/' },
   { key: 'charge', label: '收费结算', icon: 'Money', to: '/' },

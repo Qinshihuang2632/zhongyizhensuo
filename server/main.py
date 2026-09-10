@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, backup, db, paths, patients, printing
+from . import auth, backup, db, dictionary, paths, patients, printing, treatments
 
 logger = logging.getLogger(__name__)
 APP_NAME = "中医诊所管理系统"
@@ -65,6 +65,8 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
     backup.auto_backup_if_needed()  # 每日首次启动自动备份（幂等）
 
     app.include_router(patients.router)
+    app.include_router(dictionary.router)
+    app.include_router(treatments.router)
 
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):

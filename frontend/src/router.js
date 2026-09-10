@@ -6,6 +6,7 @@ import Login from './views/Login.vue'
 import Home from './views/Home.vue'
 import Settings from './views/Settings.vue'
 import Patients from './views/Patients.vue'
+import TreatmentRegister from './views/TreatmentRegister.vue'
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -15,6 +16,7 @@ export const router = createRouter({
     { path: '/setup', component: Setup },
     { path: '/settings', component: Settings },
     { path: '/patients', component: Patients },
+    { path: '/treatment-register', component: TreatmentRegister },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
