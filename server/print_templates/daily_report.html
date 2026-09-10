@@ -1,0 +1,29 @@
+{% extends "base_a4.html" %}
+{% block body %}
+<div class="doc-title">收费日结单</div>
+<table class="grid">
+  <tr><th style="width:30%">日　期</th><td>{{ date }}</td></tr>
+  <tr><th>收款笔数</th><td>{{ count }} 笔</td></tr>
+</table>
+<table class="grid" style="margin-top:10px">
+  <tr><th colspan="2">按款类</th></tr>
+  {% for k, v in by_type.items() %}
+  <tr><td>{{ k }}</td><td style="text-align:right">￥ {{ "%.2f" | format(v) }}</td></tr>
+  {% endfor %}
+  <tr><th>净收入（含预交、退费冲抵）</th><th style="text-align:right">￥ {{ "%.2f" | format(income) }}</th></tr>
+</table>
+<table class="grid" style="margin-top:10px">
+  <tr><th colspan="2">收款方式（收费/出院结算）</th></tr>
+  {% for k, v in by_method.items() %}
+  <tr><td>{{ k }}</td><td style="text-align:right">￥ {{ "%.2f" | format(v) }}</td></tr>
+  {% else %}
+  <tr><td colspan="2" style="text-align:center">当日无收费</td></tr>
+  {% endfor %}
+</table>
+<table class="grid" style="margin-top:10px">
+  <tr><th colspan="2">业务类别（收费/出院结算）</th></tr>
+  {% for k, v in by_category.items() %}
+  <tr><td>{{ k }}</td><td style="text-align:right">￥ {{ "%.2f" | format(v) }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

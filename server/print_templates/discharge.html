@@ -1,0 +1,58 @@
+{% extends "base_a4.html" %}
+{% block body %}
+<div class="doc-title">出院汇总清单</div>
+<table style="width:100%; margin-bottom:8px; font-size:11pt">
+  <tr>
+    <td>住院号：{{ adm.no }}</td>
+    <td>患者：{{ adm.patient_name }}{% if patient.age %}（{{ patient.age }}岁）{% endif %}</td>
+    <td>入院：{{ adm.admitted_at }}</td>
+    <td style="text-align:right">出院：{{ adm.discharged_at or "—" }}</td>
+  </tr>
+</table>
+
+<table class="grid" style="margin-bottom:10px">
+  <tr><th colspan="5" style="text-align:left">一、治疗项目</th></tr>
+  <tr><th style="width:10%">单号</th><th>备注</th><th style="width:14%">日期</th><th style="width:14%">状态</th><th style="width:16%">金额（元）</th></tr>
+  {% for t in treatments %}
+  <tr><td>TO{{ "%06d" | format(t.id) }}</td><td>{{ t.note or "—" }}</td><td>{{ t.created_at }}</td><td>{{ t.status }}</td><td style="text-align:right">{{ "%.2f" | format(t.total) }}</td></tr>
+  {% else %}
+  <tr><td colspan="5" style="text-align:center">无</td></tr>
+  {% endfor %}
+</table>
+
+<table class="grid" style="margin-bottom:10px">
+  <tr><th colspan="5" style="text-align:left">二、成药销售（含协定方）</th></tr>
+  <tr><th style="width:10%">单号</th><th>备注</th><th style="width:14%">日期</th><th style="width:14%">状态</th><th style="width:16%">金额（元）</th></tr>
+  {% for s in sales %}
+  <tr><td>XC{{ "%06d" | format(s.id) }}</td><td>{{ s.note or "—" }}</td><td>{{ s.created_at }}</td><td>{{ s.status }}</td><td style="text-align:right">{{ "%.2f" | format(s.total) }}</td></tr>
+  {% else %}
+  <tr><td colspan="5" style="text-align:center">无</td></tr>
+  {% endfor %}
+</table>
+
+<table class="grid" style="margin-bottom:10px">
+  <tr><th colspan="5" style="text-align:left">三、中药处方</th></tr>
+  <tr><th style="width:10%">单号</th><th>用法</th><th style="width:14%">日期</th><th style="width:14%">状态</th><th style="width:16%">金额（元）</th></tr>
+  {% for r in prescriptions %}
+  <tr><td>CF{{ "%06d" | format(r.id) }}</td><td>{{ r.usage_method or "—" }}（{{ r.doses }}剂）</td><td>{{ r.created_at }}</td><td>{{ r.status }}</td><td style="text-align:right">{{ "%.2f" | format(r.total) }}</td></tr>
+  {% else %}
+  <tr><td colspan="5" style="text-align:center">无</td></tr>
+  {% endfor %}
+</table>
+
+<table class="grid">
+  <tr>
+    <th style="width:25%">费用合计</th><td style="width:25%; text-align:right">￥ {{ "%.2f" | format(billed) }}</td>
+    <th style="width:25%">预交款</th><td style="text-align:right">￥ {{ "%.2f" | format(deposits) }}</td>
+  </tr>
+  <tr>
+    <th>结算金额（补收）</th><td style="text-align:right">￥ {{ "%.2f" | format(balance) if balance > 0 else "0.00" }}</td>
+    <th>退回预交款</th><td style="text-align:right">￥ {{ "%.2f" | format(-balance) if balance < 0 else "0.00" }}</td>
+  </tr>
+</table>
+
+<div style="margin-top:16px; border:1px solid #000; padding:10px; font-size:11pt">
+  <b>出院医嘱：</b>
+  <div style="white-space:pre-line; margin-top:6px">{{ discharge_orders }}</div>
+</div>
+{% endblock %}

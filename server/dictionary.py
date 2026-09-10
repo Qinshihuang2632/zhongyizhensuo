@@ -22,6 +22,7 @@ class ItemBody(BaseModel):
     spec: str = ""
     price: float = 0
     cost: float = 0
+    min_stock: float = 0
     manufacturer: str = ""
     note: str = ""
     active: bool = True
@@ -43,13 +44,15 @@ def _clean_item(body: ItemBody) -> tuple:
         raise HTTPException(400, "售价应在 0~999999 之间")
     if not 0 <= body.cost <= 999999:
         raise HTTPException(400, "进价应在 0~999999 之间")
+    if not 0 <= body.min_stock <= 999999:
+        raise HTTPException(400, "最低库存应在 0~999999 之间")
     texts = {"unit": body.unit.strip(), "spec": body.spec.strip(),
              "manufacturer": body.manufacturer.strip(), "note": body.note.strip()}
     for key, (label, limit) in _ITEM_TEXTS.items():
         if len(texts[key]) > limit:
             raise HTTPException(400, f"「{label}」长度不能超过 {limit} 字")
     return (body.category, name, texts["unit"], texts["spec"],
-            round(body.price, 2), round(body.cost, 2),
+            round(body.price, 2), round(body.cost, 2), body.min_stock,
             texts["manufacturer"], texts["note"], 1 if body.active else 0)
 
 
@@ -93,8 +96,8 @@ def create_item(body: ItemBody):
     values = _clean_item(body)
     with db.tx() as conn:
         cur = conn.execute(
-            "INSERT INTO items (category, name, unit, spec, price, cost, manufacturer, note, active)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", values,
+            "INSERT INTO items (category, name, unit, spec, price, cost, min_stock,"
+            " manufacturer, note, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values,
         )
         return {"id": cur.lastrowid}
 
@@ -114,7 +117,7 @@ def update_item(iid: int, body: ItemBody):
     values = _clean_item(body)
     with db.tx() as conn:
         conn.execute(
-            "UPDATE items SET category=?, name=?, unit=?, spec=?, price=?, cost=?,"
+            "UPDATE items SET category=?, name=?, unit=?, spec=?, price=?, cost=?, min_stock=?,"
             " manufacturer=?, note=?, active=?, updated_at=datetime('now','localtime')"
             " WHERE id=?", values + (iid,),
         )

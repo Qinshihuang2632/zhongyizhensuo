@@ -22,6 +22,10 @@
           <Dictionary />
         </el-tab-pane>
 
+        <el-tab-pane label="药库管理" lazy>
+          <StockManager />
+        </el-tab-pane>
+
         <el-tab-pane label="备份管理">
           <div class="bar">
             <el-button type="primary" :icon="'Plus'" :loading="backingUp" @click="createBackup">立即备份</el-button>
@@ -54,8 +58,7 @@
           </el-table>
         </el-tab-pane>
 
-        <el-tab-pane label="修改密码">
-          <el-form label-width="100px" style="max-width:480px">
+        <el-tab-pane label="修改密码">          <el-form label-width="100px" style="max-width:480px">
             <el-form-item label="原密码"><el-input v-model="pwd.old" type="password" show-password /></el-form-item>
             <el-form-item label="新密码"><el-input v-model="pwd.new1" type="password" show-password placeholder="至少 6 位" /></el-form-item>
             <el-form-item label="确认新密码"><el-input v-model="pwd.new2" type="password" show-password /></el-form-item>
@@ -71,6 +74,26 @@
           <el-button type="primary" :icon="'Printer'" @click="previewTest">预览测试单</el-button>
         </el-tab-pane>
 
+        <el-tab-pane label="出院医嘱">
+          <p class="hint" style="margin-top:0">
+            出院汇总清单末尾会固定打印以下医嘱文字（即你要求的"固化医嘱"）。可一次性修改为本诊所的说法。
+          </p>
+          <el-input v-model="dischargeOrders" type="textarea" :rows="6" style="max-width:560px" />
+          <div style="margin-top:10px">
+            <el-button type="primary" @click="saveDischargeOrders">保存医嘱文案</el-button>
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="操作留痕" lazy>
+          <el-table :data="auditItems" size="small" border max-height="430">
+            <el-table-column prop="created_at" label="时间" width="160" />
+            <el-table-column prop="action" label="动作" width="110" />
+            <el-table-column prop="detail" label="内容" min-width="300" show-overflow-tooltip />
+          </el-table>
+          <el-pagination style="margin-top:12px;justify-content:flex-end" layout="total, prev, pager, next"
+            :total="auditTotal" :page-size="auditSize" :current-page="auditPage"
+            @current-change="p => { auditPage = p; loadAudit() }" />
+        </el-tab-pane>
         <el-tab-pane label="关于">
           <div class="rows">
             <div><span class="k">系统</span><span>中医诊所管理系统 v{{ version }}</span></div>
@@ -91,6 +114,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
 import PrintPreview from '../components/PrintPreview.vue'
 import Dictionary from '../components/Dictionary.vue'
+import StockManager from '../components/StockManager.vue'
 
 const form = ref({ clinic_name: '', clinic_address: '', clinic_phone: '' })
 const backups = ref([])
@@ -102,6 +126,11 @@ const saving = ref(false)
 const backingUp = ref(false)
 const printVisible = ref(false)
 const printHtml = ref('')
+const dischargeOrders = ref('')
+const auditItems = ref([])
+const auditTotal = ref(0)
+const auditPage = ref(1)
+const auditSize = 50
 
 async function loadAll() {
   const health = await api('/health')
@@ -114,7 +143,23 @@ async function loadAll() {
     clinic_phone: cfg.clinic_phone || '',
   }
   keepInput.value = parseInt(cfg.backup_keep || '30', 10)
+  dischargeOrders.value = cfg.discharge_orders || ''
   backups.value = await api('/backup/list')
+}
+
+function loadAudit() {
+  api(`/audit?page=${auditPage.value}&size=${auditSize}`)
+    .then(r => { auditItems.value = r.items; auditTotal.value = r.total })
+    .catch(() => {})
+}
+
+async function saveDischargeOrders() {
+  try {
+    await api('/settings', { method: 'PUT', body: { values: { discharge_orders: dischargeOrders.value } } })
+    ElMessage.success('医嘱文案已保存')
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
 }
 
 onMounted(loadAll)

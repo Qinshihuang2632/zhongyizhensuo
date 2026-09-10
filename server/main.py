@@ -12,13 +12,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, backup, db, dictionary, paths, patients, printing, treatments
+from . import admissions, audit, auth, backup, charges, db, dictionary, paths, patients, printing, prescriptions, queries, sales, stock, treatments
 
 logger = logging.getLogger(__name__)
 APP_NAME = "中医诊所管理系统"
 
 _OPEN_PATHS = {"/api/health", "/api/setup/status", "/api/setup/init", "/api/auth/login"}
-_EDITABLE_SETTINGS = {"clinic_name", "clinic_address", "clinic_phone", "backup_keep"}
+_EDITABLE_SETTINGS = {"clinic_name", "clinic_address", "clinic_phone", "backup_keep", "discharge_orders"}
 
 
 class InitBody(BaseModel):
@@ -67,6 +67,12 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
     app.include_router(patients.router)
     app.include_router(dictionary.router)
     app.include_router(treatments.router)
+    app.include_router(stock.router)
+    app.include_router(prescriptions.router)
+    app.include_router(sales.router)
+    app.include_router(charges.router)
+    app.include_router(admissions.router)
+    app.include_router(queries.router)
 
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):
@@ -110,6 +116,7 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
         token = auth.login(body.username, body.password)
         if token is None:
             raise HTTPException(401, "密码错误")
+        audit.record("登录", "管理员登录成功")
         return {"token": token}
 
     @app.post("/api/auth/change-password")
@@ -120,6 +127,7 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
             auth.change_password(body.old_password, body.new_password)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
+        audit.record("修改密码", "管理员修改了登录密码")
         return {"ok": True}
 
     # ---- 系统设置 ----
@@ -158,6 +166,7 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
             backup.schedule_restore(body.name)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
+        audit.record("恢复备份", f"安排恢复自 {body.name}")
         if on_shutdown is not None:
             on_shutdown()  # 当前响应返回后服务退出；下次启动自动完成替换
         return {"ok": True, "message": "恢复已安排，程序即将退出；请重新启动程序完成恢复"}
@@ -175,6 +184,12 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         return {"html": html}
+
+    # ---- 操作留痕 ----
+
+    @app.get("/api/audit")
+    def audit_list(page: int = 1, size: int = 50):
+        return audit.list_log(page, size)
 
     # ---- 受控关机 ----
 

@@ -65,12 +65,12 @@ const exited = ref(false)
 const modules = [
   { key: 'reg', label: '信息登记', icon: 'User', to: '/patients', enabled: true },
   { key: 'item', label: '项目登记', icon: 'List', to: '/treatment-register', enabled: true },
-  { key: 'sale', label: '药品销售', icon: 'ShoppingCart', to: '/' },
-  { key: 'rx', label: '处方开药', icon: 'EditPen', to: '/' },
-  { key: 'charge', label: '收费结算', icon: 'Money', to: '/' },
-  { key: 'disch', label: '办理出院', icon: 'Finished', to: '/' },
-  { key: 'print', label: '打印中心', icon: 'Printer', to: '/' },
-  { key: 'query', label: '查询中心', icon: 'Search', to: '/' },
+  { key: 'sale', label: '药品销售', icon: 'ShoppingCart', to: '/sales', enabled: true },
+  { key: 'rx', label: '处方开药', icon: 'EditPen', to: '/prescriptions', enabled: true },
+  { key: 'charge', label: '收费结算', icon: 'Money', to: '/charge', enabled: true },
+  { key: 'disch', label: '办理出院', icon: 'Finished', to: '/discharge', enabled: true },
+  { key: 'print', label: '打印中心', icon: 'Printer', to: '/print-center', enabled: true },
+  { key: 'query', label: '查询中心', icon: 'Search', to: '/query-center', enabled: true },
 ]
 
 const backupWarn = computed(() => {

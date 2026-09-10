@@ -1,0 +1,36 @@
+{% extends "base_a4.html" %}
+{% block body %}
+<div class="doc-title">中药处方笺</div>
+<table style="width:100%; margin-bottom:8px; font-size:11pt">
+  <tr>
+    <td>单号：{{ rx.no }}</td>
+    <td>对象：{{ rx.owner_type }}</td>
+    <td>患者：{{ rx.patient_name }}</td>
+    <td style="text-align:right">日期：{{ rx.created_at }}</td>
+  </tr>
+</table>
+<table class="grid">
+  <tr>
+    <th style="width:8%">序号</th><th>药　名</th>
+    <th style="width:18%">每剂用量</th><th style="width:18%">单价（元）</th>
+  </tr>
+  {% for l in lines %}
+  <tr>
+    <td style="text-align:center">{{ loop.index }}</td>
+    <td>{{ l.item_name }}</td>
+    <td style="text-align:center">{{ l.qty | int if l.qty == l.qty | int else l.qty }} {{ l.unit }}</td>
+    <td style="text-align:right">{{ "%.2f" | format(l.price) }}</td>
+  </tr>
+  {% endfor %}
+</table>
+<table style="width:100%; margin-top:10px; font-size:11.5pt">
+  <tr>
+    <td>剂　数：<b>{{ rx.doses }}</b> 剂</td>
+    <td>用　法：{{ rx.usage_method or "—" }}</td>
+    <td style="text-align:right">每剂金额：￥ {{ "%.2f" | format(rx.per_dose_total) }}</td>
+    <td style="text-align:right">合　计：<b>￥ {{ "%.2f" | format(rx.total) }}</b></td>
+  </tr>
+</table>
+{% if rx.note %}<p style="font-size:11pt">备注：{{ rx.note }}</p>{% endif %}
+<p style="margin-top:28px; font-size:11pt">医师签名：＿＿＿＿＿＿＿＿</p>
+{% endblock %}

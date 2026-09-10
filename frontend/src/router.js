@@ -7,6 +7,12 @@ import Home from './views/Home.vue'
 import Settings from './views/Settings.vue'
 import Patients from './views/Patients.vue'
 import TreatmentRegister from './views/TreatmentRegister.vue'
+import Prescriptions from './views/Prescriptions.vue'
+import Sales from './views/Sales.vue'
+import Charge from './views/Charge.vue'
+import Discharge from './views/Discharge.vue'
+import PrintCenter from './views/PrintCenter.vue'
+import QueryCenter from './views/QueryCenter.vue'
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -17,6 +23,12 @@ export const router = createRouter({
     { path: '/settings', component: Settings },
     { path: '/patients', component: Patients },
     { path: '/treatment-register', component: TreatmentRegister },
+    { path: '/prescriptions', component: Prescriptions },
+    { path: '/sales', component: Sales },
+    { path: '/charge', component: Charge },
+    { path: '/discharge', component: Discharge },
+    { path: '/print-center', component: PrintCenter },
+    { path: '/query-center', component: QueryCenter },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
