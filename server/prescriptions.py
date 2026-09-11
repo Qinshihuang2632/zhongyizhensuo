@@ -54,6 +54,12 @@ def _clean(body: RxBody, conn) -> tuple[int | None, str, list, float, float]:
             ).fetchone()
             if adm is None:
                 raise HTTPException(400, "该患者当前不在院，请先到「办理出院」办理入院")
+        else:
+            adm = conn.execute(
+                "SELECT id FROM admissions WHERE patient_id = ? AND status = '在院'", (body.patient_id,)
+            ).fetchone()
+            if adm is not None:
+                raise HTTPException(400, "该患者在院，住院期间费用请用「住院」对象记账")
         pid, pname = body.patient_id, row["name"]
     if not body.lines:
         raise HTTPException(400, "处方至少一味药")

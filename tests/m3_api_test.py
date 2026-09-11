@@ -112,14 +112,6 @@ def main():
     })
     check("散户登记划价", o1.get("total") == 160, str(o1))  # 针灸60x2 + 推拿40
 
-    o2 = None
-    adm = call("POST", "/api/admissions", {"patient_id": pid})  # 2026-09-12 起：住院单限在院患者
-    o2 = call("POST", "/api/treatment-orders", {
-        "owner_type": "住院", "patient_id": pid,
-        "lines": [{"item_id": iid_moxa, "qty": 3}], "note": "住院期间艾灸",
-    })
-    check("住院登记", bool(o2.get("id")) and o2.get("total") == 90)
-
     o3 = call("POST", "/api/treatment-orders", {
         "owner_type": "散户", "patient_name": "门口散户",
         "lines": [{"item_id": iid_mass, "qty": 1}],
@@ -142,6 +134,14 @@ def main():
     })
     d = call("GET", f"/api/treatment-orders/{o1['id']}")
     check("修改后重划价", d.get("total") == 180 and len(d.get("lines", [])) == 1)
+
+    # 住院单：先入院再登记（散户单修改完毕后，避免在院状态影响散户流程）
+    adm = call("POST", "/api/admissions", {"patient_id": pid})
+    o2 = call("POST", "/api/treatment-orders", {
+        "owner_type": "住院", "patient_id": pid,
+        "lines": [{"item_id": iid_moxa, "qty": 3}], "note": "住院期间艾灸",
+    })
+    check("住院登记", bool(o2.get("id")) and o2.get("total") == 90)
 
     lst = call("GET", "/api/treatment-orders?owner_type=" + quote("住院"))
     check("按对象过滤", lst.get("total") == 1)

@@ -47,6 +47,11 @@ def _resolve_patient(conn, body: OrderBody) -> tuple[int | None, str]:
     row = conn.execute("SELECT name FROM patients WHERE id = ?", (body.patient_id,)).fetchone()
     if row is None:
         raise HTTPException(400, "所选患者不存在")
+    adm = conn.execute(
+        "SELECT id FROM admissions WHERE patient_id = ? AND status = '在院'", (body.patient_id,)
+    ).fetchone()
+    if adm is not None:
+        raise HTTPException(400, "该患者在院，住院期间费用请用「住院」对象记账")
     return body.patient_id, row["name"]
 
 

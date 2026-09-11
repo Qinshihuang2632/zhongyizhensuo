@@ -46,7 +46,7 @@
       </el-card>
     </main>
 
-    <div v-if="exited" class="exited">系统已退出，可以关闭此页面。</div>
+    <div v-if="exited" class="exited">系统已退出，如窗口未自动关闭请手动关闭本窗口。</div>
   </div>
 </template>
 
@@ -98,6 +98,8 @@ async function shutdown() {
   } catch { /* 服务已停，忽略 */ }
   exited.value = true
   ElMessage.success('已退出')
+  // 独立应用窗口（Edge/Chrome 应用模式）下尝试自动关闭窗口；失败则停留在退出提示页
+  setTimeout(() => { try { window.close(); } catch { /* 忽略 */ } }, 600)
 }
 </script>
 

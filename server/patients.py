@@ -68,12 +68,17 @@ def _to_dict(row) -> dict:
 
 
 @router.get("")
-def list_patients(keyword: str = "", page: int = 1, size: int = 20):
+def list_patients(keyword: str = "", page: int = 1, size: int = 20, exclude_inpatient: int = 0):
     page = max(1, page)
     size = min(max(1, size), 100)
     kw = keyword.strip()
-    where = ("WHERE :kw = '' OR name LIKE '%' || :kw || '%' "
-             "OR phone LIKE '%' || :kw || '%' OR CAST(id AS TEXT) = :kw")
+    conds = []
+    if kw:
+        conds.append("(name LIKE '%' || :kw || '%' OR phone LIKE '%' || :kw || '%'"
+                     " OR CAST(id AS TEXT) = :kw)")
+    if exclude_inpatient:
+        conds.append("id NOT IN (SELECT patient_id FROM admissions WHERE status = '在院')")
+    where = ("WHERE " + " AND ".join(conds)) if conds else ""
     params = {"kw": kw, "size": size, "offset": (page - 1) * size}
     total = db.one(f"SELECT COUNT(*) AS c FROM patients {where}", params)["c"]
     rows = db.query(

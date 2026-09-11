@@ -83,6 +83,14 @@ def main():
     lst = call("GET", "/api/admissions?status=" + quote("在院"))
     check("在院名单含该患者", any(i["patient_id"] == pid for i in lst.get("items", [])))
 
+    # 散户不能给在院患者记账；散户检索排除在院
+    call("POST", "/api/treatment-orders", {"owner_type": "散户", "patient_id": pid,
+                                           "lines": [{"item_id": t1, "qty": 1}]}, expect=400)
+    exc = call("GET", "/api/patients?exclude_inpatient=1")
+    check("散户检索排除在院", all(i["id"] != pid for i in exc.get("items", [])))
+    inc = call("GET", "/api/patients")
+    check("全档案仍含在院", any(i["id"] == pid for i in inc.get("items", [])))
+
     # 出院后：再开住院单拒绝（堵住截图里"出院后又记账"的漏洞）
     call("POST", f"/api/admissions/{adm['id']}/discharge", {"method": "现金"})
     call("POST", "/api/treatment-orders", {"owner_type": "住院", "patient_id": pid,

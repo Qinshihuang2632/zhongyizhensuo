@@ -202,7 +202,8 @@ async function searchPatients(query) {
       }))
     } else {
       if (!query) { patientOptions.value = []; return }
-      const r = await api(`/patients?keyword=${encodeURIComponent(query)}&size=20`)
+      // 散户不能选在院患者（在院期间费用走住院账户）
+      const r = await api(`/patients?keyword=${encodeURIComponent(query)}&size=20&exclude_inpatient=1`)
       patientOptions.value = r.items.map(p => ({
         id: p.id,
         label: `${p.name}（${p.no}，${p.phone}）`,
