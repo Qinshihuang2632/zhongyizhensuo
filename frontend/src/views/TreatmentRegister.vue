@@ -13,7 +13,7 @@
           <el-row :gutter="12">
             <el-col :span="10">
               <el-form-item label="对象类型">
-                <el-radio-group v-model="form.owner_type" @change="resetPatient">
+                <el-radio-group v-model="form.owner_type" @change="onOwnerChange">
                   <el-radio-button value="散户">散户</el-radio-button>
                   <el-radio-button value="住院">住院</el-radio-button>
                 </el-radio-group>
@@ -28,15 +28,10 @@
                   clearable
                   :remote-method="searchPatients"
                   :loading="searching"
-                  placeholder="输入姓名 / 电话搜索患者档案"
+                  :placeholder="form.owner_type === '住院' ? '选择在院患者（可输入姓名过滤）' : '输入姓名 / 电话搜索患者档案'"
                   style="width:100%"
                 >
-                  <el-option
-                    v-for="p in patientOptions"
-                    :key="p.id"
-                    :label="`${p.name}（${p.no}，${p.phone}）`"
-                    :value="p.id"
-                  />
+                  <el-option v-for="p in patientOptions" :key="p.id" :label="p.label" :value="p.id" />
                 </el-select>
               </el-form-item>
             </el-col>
@@ -45,7 +40,7 @@
             <el-input v-model="form.patient_name" placeholder="无档案时填写，留空记为「散户」" maxlength="50" style="width:280px" />
           </el-form-item>
           <el-form-item v-if="form.owner_type === '住院'" label=" ">
-            <span class="hint">住院患者目前从患者档案中选择；「办理出院」上线后将限定为在院患者。</span>
+            <span class="hint">住院患者只能从「在院名单」中选择；新患者请先到「办理出院」页面办理入院。</span>
           </el-form-item>
 
           <el-form-item label="治疗项目">
@@ -190,26 +185,40 @@ function resetPatient() {
   form.patient_name = ''
 }
 
+async function onOwnerChange() {
+  resetPatient()
+  if (form.owner_type === '住院') await searchPatients('')
+}
+
+async function searchPatients(query) {
+  searching.value = true
+  try {
+    if (form.owner_type === '住院') {
+      // 住院只能从在院名单中选
+      const r = await api(`/admissions?status=${encodeURIComponent('在院')}&keyword=${encodeURIComponent(query || '')}&size=100`)
+      patientOptions.value = r.items.map(a => ({
+        id: a.patient_id,
+        label: `${a.patient_name}（住院号 ${a.no}）`,
+      }))
+    } else {
+      if (!query) { patientOptions.value = []; return }
+      const r = await api(`/patients?keyword=${encodeURIComponent(query)}&size=20`)
+      patientOptions.value = r.items.map(p => ({
+        id: p.id,
+        label: `${p.name}（${p.no}，${p.phone}）`,
+      }))
+    }
+  } catch { /* 忽略瞬时错误 */ } finally {
+    searching.value = false
+  }
+}
+
 function addLine() {
   form.lines.push({ item_id: null, qty: 1, price: 0 })
 }
 
 function onItemChange(row, item) {
   row.price = item ? item.price : 0
-}
-
-async function searchPatients(query) {
-  if (!query) {
-    patientOptions.value = []
-    return
-  }
-  searching.value = true
-  try {
-    const r = await api(`/patients?keyword=${encodeURIComponent(query)}&size=20`)
-    patientOptions.value = r.items
-  } catch { /* 忽略瞬时错误 */ } finally {
-    searching.value = false
-  }
 }
 
 async function loadOrders() {

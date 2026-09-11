@@ -13,7 +13,7 @@
           <el-row :gutter="12">
             <el-col :span="8">
               <el-form-item label="对象类型">
-                <el-radio-group v-model="form.owner_type" @change="form.patient_id = null; form.patient_name = ''">
+                <el-radio-group v-model="form.owner_type" @change="onOwnerChange">
                   <el-radio-button value="散户">散户</el-radio-button>
                   <el-radio-button value="住院">住院</el-radio-button>
                 </el-radio-group>
@@ -22,8 +22,9 @@
             <el-col :span="16">
               <el-form-item label="患者" :required="form.owner_type === '住院'">
                 <el-select v-model="form.patient_id" filterable remote clearable :remote-method="searchPatients"
-                  :loading="searching" placeholder="输入姓名 / 电话搜索患者档案" style="width:100%">
-                  <el-option v-for="p in patientOptions" :key="p.id" :label="`${p.name}（${p.no}，${p.phone}）`" :value="p.id" />
+                  :loading="searching" :placeholder="form.owner_type === '住院' ? '选择在院患者（可输入姓名过滤）' : '输入姓名 / 电话搜索患者档案'"
+                  style="width:100%">
+                  <el-option v-for="p in patientOptions" :key="p.id" :label="p.label" :value="p.id" />
                 </el-select>
               </el-form-item>
             </el-col>
@@ -162,11 +163,30 @@ function onItem(row, item) {
 }
 
 async function searchPatients(q) {
-  if (!q) { patientOptions.value = []; return }
   searching.value = true
   try {
-    patientOptions.value = (await api(`/patients?keyword=${encodeURIComponent(q)}&size=20`)).items
+    if (form.owner_type === '住院') {
+      // 住院只能从在院名单中选
+      const r = await api(`/admissions?status=${encodeURIComponent('在院')}&keyword=${encodeURIComponent(q || '')}&size=100`)
+      patientOptions.value = r.items.map(a => ({
+        id: a.patient_id,
+        label: `${a.patient_name}（住院号 ${a.no}）`,
+      }))
+    } else {
+      if (!q) { patientOptions.value = []; return }
+      const r = await api(`/patients?keyword=${encodeURIComponent(q)}&size=20`)
+      patientOptions.value = r.items.map(p => ({
+        id: p.id,
+        label: `${p.name}（${p.no}，${p.phone}）`,
+      }))
+    }
   } catch { /* 忽略 */ } finally { searching.value = false }
+}
+
+async function onOwnerChange() {
+  form.patient_id = null
+  form.patient_name = ''
+  if (form.owner_type === '住院') await searchPatients('')
 }
 
 async function loadList() {

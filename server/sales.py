@@ -84,6 +84,8 @@ def _validate_header(body: SaleBody, conn) -> tuple[int | None, str]:
     if len(body.note.strip()) > 200:
         raise HTTPException(400, "备注过长")
     if body.patient_id is None:
+        if body.owner_type == "住院":
+            raise HTTPException(400, "住院销售单必须选择患者")
         name = body.patient_name.strip() or "散户"
         if len(name) > 50:
             raise HTTPException(400, "患者姓名过长")
@@ -91,6 +93,12 @@ def _validate_header(body: SaleBody, conn) -> tuple[int | None, str]:
     row = conn.execute("SELECT name FROM patients WHERE id = ?", (body.patient_id,)).fetchone()
     if row is None:
         raise HTTPException(400, "所选患者不存在")
+    if body.owner_type == "住院":
+        adm = conn.execute(
+            "SELECT id FROM admissions WHERE patient_id = ? AND status = '在院'", (body.patient_id,)
+        ).fetchone()
+        if adm is None:
+            raise HTTPException(400, "该患者当前不在院，请先到「办理出院」办理入院")
     return body.patient_id, row["name"]
 
 

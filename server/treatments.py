@@ -27,8 +27,18 @@ class OrderBody(BaseModel):
 
 
 def _resolve_patient(conn, body: OrderBody) -> tuple[int | None, str]:
-    if body.owner_type == "住院" and body.patient_id is None:
-        raise HTTPException(400, "住院治疗单必须选择患者")
+    if body.owner_type == "住院":
+        if body.patient_id is None:
+            raise HTTPException(400, "住院治疗单必须选择患者")
+        p = conn.execute("SELECT name FROM patients WHERE id = ?", (body.patient_id,)).fetchone()
+        if p is None:
+            raise HTTPException(400, "所选患者不存在")
+        adm = conn.execute(
+            "SELECT id FROM admissions WHERE patient_id = ? AND status = '在院'", (body.patient_id,)
+        ).fetchone()
+        if adm is None:
+            raise HTTPException(400, "该患者当前不在院，请先到「办理出院」办理入院")
+        return body.patient_id, p["name"]
     if body.patient_id is None:
         name = body.patient_name.strip() or "散户"
         if len(name) > 50:

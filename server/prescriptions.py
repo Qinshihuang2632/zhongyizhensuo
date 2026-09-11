@@ -38,6 +38,8 @@ def _clean(body: RxBody, conn) -> tuple[int | None, str, list, float, float]:
     if len(body.usage_method.strip()) > 100 or len(body.note.strip()) > 200:
         raise HTTPException(400, "用法/备注过长")
     if body.patient_id is None:
+        if body.owner_type == "住院":
+            raise HTTPException(400, "住院处方必须选择患者")
         name = body.patient_name.strip() or "散户"
         if len(name) > 50:
             raise HTTPException(400, "患者姓名过长")
@@ -46,6 +48,12 @@ def _clean(body: RxBody, conn) -> tuple[int | None, str, list, float, float]:
         row = conn.execute("SELECT name FROM patients WHERE id = ?", (body.patient_id,)).fetchone()
         if row is None:
             raise HTTPException(400, "所选患者不存在")
+        if body.owner_type == "住院":
+            adm = conn.execute(
+                "SELECT id FROM admissions WHERE patient_id = ? AND status = '在院'", (body.patient_id,)
+            ).fetchone()
+            if adm is None:
+                raise HTTPException(400, "该患者当前不在院，请先到「办理出院」办理入院")
         pid, pname = body.patient_id, row["name"]
     if not body.lines:
         raise HTTPException(400, "处方至少一味药")

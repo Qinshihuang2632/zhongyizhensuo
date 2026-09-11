@@ -172,8 +172,23 @@ async function discharge() {
     const r = await api(`/admissions/${current.value.id}/discharge`, { method: 'POST', body: { method: method.value } })
     ElMessage.success(`出院完成，${r.balance >= 0 ? '补收' : '退回'} ¥${Math.abs(r.balance).toFixed(2)}`)
     const d = await api(`/admissions/${current.value.id}`)
-    d.balance = r.balance
-    const { html } = await api('/print/preview', { method: 'POST', body: { template: 'discharge', data: d } })
+    const { html } = await api('/print/preview', {
+      method: 'POST',
+      body: {
+        template: 'discharge',
+        data: {
+          adm: d,
+          patient: d.patient || {},
+          treatments: d.treatments,
+          sales: d.sales,
+          prescriptions: d.prescriptions,
+          billed: d.billed,
+          deposits: d.deposits,
+          balance: r.balance,
+          discharge_orders: d.discharge_orders,
+        },
+      },
+    })
     printHtml.value = html
     printVisible.value = true
     current.value = null

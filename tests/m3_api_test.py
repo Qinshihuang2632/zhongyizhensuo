@@ -112,6 +112,8 @@ def main():
     })
     check("散户登记划价", o1.get("total") == 160, str(o1))  # 针灸60x2 + 推拿40
 
+    o2 = None
+    adm = call("POST", "/api/admissions", {"patient_id": pid})  # 2026-09-12 起：住院单限在院患者
     o2 = call("POST", "/api/treatment-orders", {
         "owner_type": "住院", "patient_id": pid,
         "lines": [{"item_id": iid_moxa, "qty": 3}], "note": "住院期间艾灸",
