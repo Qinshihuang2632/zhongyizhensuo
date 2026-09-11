@@ -14,7 +14,7 @@
         <el-tab-pane label="日结" name="daily" />
       </el-tabs>
 
-      <div class="bar">
+      <div class="bar" v-if="tab !== 'daily'">
         <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD"
           start-placeholder="开始日期" end-placeholder="结束日期" style="width:260px" @change="load" />
         <el-select v-if="tab === 'charges'" v-model="chargeType" style="width:120px" @change="load">
@@ -85,13 +85,28 @@
         </el-table>
       </template>
 
-      <!-- 日结 -->
+      <!-- 日结 / 月结 / 年结 -->
       <template v-else>
+        <div class="bar">
+          <el-radio-group v-model="reportMode" @change="modeChanged">
+            <el-radio-button value="daily">日结（可选日期范围）</el-radio-button>
+            <el-radio-button value="monthly">月结（已结束的整月）</el-radio-button>
+            <el-radio-button value="yearly">年结（已结束的整年）</el-radio-button>
+          </el-radio-group>
+          <el-date-picker v-if="reportMode === 'daily'" v-model="dateRange" type="daterange"
+            value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期"
+            clearable style="width:260px" @change="load" />
+          <el-date-picker v-if="reportMode === 'monthly'" v-model="monthVal" type="month"
+            value-format="YYYY-MM" placeholder="选择月份" :disabled-date="disableMonth" style="width:160px" @change="load" />
+          <el-date-picker v-if="reportMode === 'yearly'" v-model="yearVal" type="year"
+            value-format="YYYY" placeholder="选择年份" :disabled-date="disableYear" style="width:140px" @change="load" />
+          <span class="mode-hint">{{ modeHint }}</span>
+        </div>
         <el-card v-if="daily" style="max-width:640px">
           <template #header>
             <div class="list-head">
-              <span>日结 · {{ daily.date }}</span>
-              <el-button size="small" :icon="'Printer'" @click="printDaily">打印日结单</el-button>
+              <span>{{ modeTitle }} · {{ daily.period }}</span>
+              <el-button size="small" :icon="'Printer'" @click="printDaily">打印{{ modeTitle }}</el-button>
             </div>
           </template>
           <div class="daily-grid">
@@ -136,8 +151,34 @@ const chargeType = ref('')
 const moveDir = ref('')
 const loading = ref(false)
 const daily = ref(null)
+const reportMode = ref('daily')
+const monthVal = ref('')
+const yearVal = ref('')
 const printVisible = ref(false)
 const printHtml = ref('')
+
+const modeTitle = computed(() =>
+  ({ daily: '日结', monthly: '月结单', yearly: '年结单' })[reportMode.value],
+)
+const modeHint = computed(() => ({
+  daily: '不选日期 = 今天；选范围 = 区间汇总（可看本月至今）',
+  monthly: '只能选择已结束的自然月；本月数据请用日结的日期范围查看',
+  yearly: '只能选择已结束的自然年',
+})[reportMode.value])
+
+function disableMonth(d) {
+  const dt = new Date(d)
+  const now = new Date()
+  return dt.getFullYear() > now.getFullYear() ||
+    (dt.getFullYear() === now.getFullYear() && dt.getMonth() >= now.getMonth())
+}
+function disableYear(d) {
+  return new Date(d).getFullYear() >= new Date().getFullYear()
+}
+
+function modeChanged() {
+  daily.value = null
+}
 
 function dateParams() {
   if (!dateRange.value?.length) return ''
@@ -162,8 +203,24 @@ async function load() {
       rows.value = await api(`/queries/patients-summary?keyword=${encodeURIComponent(kw.value)}${dateParams()}`)
       total.value = rows.value.length
     } else {
-      const d = dateRange.value?.length ? dateRange.value[0] : ''
-      daily.value = await api(`/reports/daily?date=${d}`)
+      try {
+        if (reportMode.value === 'monthly') {
+          if (!monthVal.value) { daily.value = null; return }
+          daily.value = await api(`/reports/monthly?month=${monthVal.value}`)
+        } else if (reportMode.value === 'yearly') {
+          if (!yearVal.value) { daily.value = null; return }
+          daily.value = await api(`/reports/yearly?year=${yearVal.value}`)
+        } else {
+          if (dateRange.value?.length) {
+            daily.value = await api(`/reports/daily?start=${dateRange.value[0]}&end=${dateRange.value[1]}`)
+          } else {
+            daily.value = await api('/reports/daily')
+          }
+        }
+      } catch (e) {
+        daily.value = null
+        ElMessage.error(e.message)
+      }
       rows.value = []
       total.value = 0
     }
@@ -175,7 +232,8 @@ async function load() {
 }
 
 async function printDaily() {
-  const { html } = await api('/print/preview', { method: 'POST', body: { template: 'daily_report', data: daily.value } })
+  const title = { daily: '收费日结单', monthly: '收费月结单', yearly: '收费年结单' }[reportMode.value]
+  const { html } = await api('/print/preview', { method: 'POST', body: { template: 'daily_report', data: { ...daily.value, title } } })
   printHtml.value = html
   printVisible.value = true
 }
@@ -189,7 +247,8 @@ onMounted(load)
 .topbar { background: #075e54; color: #fff; padding: 10px 24px; display: flex; align-items: center; gap: 16px; }
 .title { font-size: 17px; font-weight: bold; }
 .content { padding: 20px 24px; }
-.bar { display: flex; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+.bar { display: flex; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+.mode-hint { color: #888; font-size: 13px; }
 .list-head { display: flex; justify-content: space-between; align-items: center; }
 .daily-grid { display: flex; gap: 28px; font-size: 14px; }
 .daily-grid .k { color: #888; margin-right: 6px; }

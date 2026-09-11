@@ -1,8 +1,8 @@
 {% extends "base_a4.html" %}
 {% block body %}
-<div class="doc-title">收费日结单</div>
+<div class="doc-title">{{ title or "收费日结单" }}</div>
 <table class="grid">
-  <tr><th style="width:30%">日　期</th><td>{{ date }}</td></tr>
+  <tr><th style="width:30%">统计区间</th><td>{{ period }}</td></tr>
   <tr><th>收款笔数</th><td>{{ count }} 笔</td></tr>
 </table>
 <table class="grid" style="margin-top:10px">

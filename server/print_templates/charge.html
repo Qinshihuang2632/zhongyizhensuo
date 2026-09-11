@@ -1,19 +1,36 @@
 {% extends "base_a4.html" %}
 {% block body %}
-<div class="doc-title">收费凭证</div>
+<div class="doc-title">{{ "收费凭证" if c.no_type != "退费" else "退费凭证" }}{% if c.links and c.links | length > 1 %}（合并）{% endif %}</div>
 <table class="grid">
   <tr><th style="width:24%">单　号</th><td>{{ c.no }}</td></tr>
   <tr><th>类　型</th><td>{{ c.no_type }}</td></tr>
   <tr><th>患　者</th><td>{{ c.patient_name or "—" }}</td>
       <th style="width:20%">对象</th><td>{{ c.owner_type }}</td></tr>
-  {% if c.source_no %}
-  <tr><th>业务单据</th><td>{{ c.source_no }}{% if c.source_total is defined %}（单据金额 ￥{{ "%.2f" | format(c.source_total) }}）{% endif %}</td></tr>
-  {% endif %}
-  <tr><th>收款方式</th><td>{{ c.method or "—" }}</td></tr>
+</table>
+
+{% if c.links and c.links | length > 0 %}
+<table class="grid" style="margin-top:10px">
+  <tr><th style="width:10%">序号</th><th>业务单据</th><th style="width:24%">金额（元）</th></tr>
+  {% for l in c.links %}
   <tr>
-    <th>金　额</th>
-    <td style="font-size:14pt"><b>￥ {{ "%.2f" | format(c.amount) }}</b></td>
+    <td style="text-align:center">{{ loop.index }}</td>
+    <td>{{ l.no }}</td>
+    <td style="text-align:right">{{ "%.2f" | format(l.amount) }}</td>
   </tr>
+  {% endfor %}
+  <tr><th colspan="2" style="text-align:right">本次合计</th><th style="text-align:right">{{ "%.2f" | format(c.amount) }}</th></tr>
+</table>
+{% else %}
+<table class="grid" style="margin-top:10px">
+  {% if c.source_no %}
+  <tr><th style="width:24%">业务单据</th><td>{{ c.source_no }}</td></tr>
+  {% endif %}
+  <tr><th>金　额</th><td style="font-size:14pt"><b>￥ {{ "%.2f" | format(c.amount) }}</b></td></tr>
+</table>
+{% endif %}
+
+<table class="grid" style="margin-top:10px">
+  <tr><th style="width:24%">收款方式</th><td>{{ c.method or "—" }}</td></tr>
   {% if c.note %}<tr><th>备　注</th><td>{{ c.note }}</td></tr>{% endif %}
   <tr><th>日　期</th><td>{{ c.created_at }}</td></tr>
 </table>

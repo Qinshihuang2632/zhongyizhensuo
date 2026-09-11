@@ -117,7 +117,14 @@
               </el-form-item>
             </el-col>
           </el-row>
-          <el-form-item label="厂家"><el-input v-model="itemForm.manufacturer" maxlength="50" /></el-form-item>
+          <el-row :gutter="12">
+            <el-col :span="12">
+              <el-form-item label="最低库存">
+                <el-input-number v-model="itemForm.min_stock" :min="0" :max="999999" :step="1" style="width:100%" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12"><el-form-item label="厂家"><el-input v-model="itemForm.manufacturer" maxlength="50" /></el-form-item></el-col>
+          </el-row>
         </template>
         <el-form-item label="备注"><el-input v-model="itemForm.note" type="textarea" :rows="2" maxlength="200" /></el-form-item>
       </el-form>
@@ -180,7 +187,7 @@ const itemLoading = ref(false)
 const itemDialog = ref(false)
 const itemSaving = ref(false)
 const emptyItem = () => ({
-  id: 0, name: '', unit: '', spec: '', price: 0, cost: 0, manufacturer: '', note: '',
+  id: 0, name: '', unit: '', spec: '', price: 0, cost: 0, min_stock: 0, manufacturer: '', note: '',
 })
 const itemForm = ref(emptyItem())
 

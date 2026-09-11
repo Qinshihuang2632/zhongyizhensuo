@@ -255,6 +255,24 @@ def adjust(body: AdjustBody):
     return {"ok": True}
 
 
+class MinStockBody(BaseModel):
+    min_stock: float
+
+
+@router.put("/{item_id}/min-stock")
+def set_min_stock(item_id: int, body: MinStockBody):
+    """调整界面里直接改某药品的低库存线。"""
+    if not 0 <= body.min_stock <= 999999:
+        raise HTTPException(400, "低库存线应在 0~999999 之间")
+    item = db.one("SELECT id FROM items WHERE id = ?", (item_id,))
+    if item is None:
+        raise HTTPException(404, "条目不存在")
+    with db.tx() as conn:
+        conn.execute("UPDATE items SET min_stock = ?, updated_at=datetime('now','localtime') WHERE id = ?",
+                     (body.min_stock, item_id))
+    return {"ok": True}
+
+
 @router.get("/moves")
 def list_moves(item_id: int = 0, direction: str = "", keyword: str = "",
                start: str = "", end: str = "", page: int = 1, size: int = 20):

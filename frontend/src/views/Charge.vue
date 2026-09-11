@@ -25,7 +25,14 @@
             </div>
           </div>
         </template>
-        <el-table :data="pending" v-loading="loading" size="small" border>
+        <div v-if="selPending.length" class="merge-bar">
+          <span>已选 <b>{{ selPending.length }}</b> 张单，合计 <b>¥ {{ selPendingTotal.toFixed(2) }}</b></span>
+          <el-button size="small" type="primary" @click="settleBatch('现金')">合并收款（现金）</el-button>
+          <el-button size="small" type="success" @click="settleBatch('扫码')">合并收款（扫码）</el-button>
+          <span class="hint">同一患者的多张单可勾选后一并收总账，打印一张合并凭证</span>
+        </div>
+        <el-table :data="pending" v-loading="loading" size="small" border @selection-change="selPending = $event">
+          <el-table-column type="selection" width="40" />
           <el-table-column label="单号" width="100">
             <template #default="{ row }">
               {{ { treatment_order: 'TO', prescription: 'CF', sale: 'XC' }[row._type] }}{{ String(row.id).padStart(6, '0') }}
@@ -55,12 +62,18 @@
       </el-card>
 
       <el-card>
-        <template #header>散户退费（退回已收费单据并恢复库存）</template>
+        <template #header>散户退费（退回已收费单据并恢复库存；可勾选多张一并退）</template>
         <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
           <el-input v-model="refundKw" placeholder="搜索已收费单据：患者 / 单号" style="width:280px" @keyup.enter="searchRefundable" @clear="refundable = []" />
           <el-button :icon="'Search'" @click="searchRefundable">搜索</el-button>
         </div>
-        <el-table v-if="refundable.length" :data="refundable" size="small" border style="margin-top:10px">
+        <div v-if="selRefund.length" class="merge-bar">
+          <span>已选 <b>{{ selRefund.length }}</b> 张单，合计 <b>¥ {{ selRefundTotal.toFixed(2) }}</b></span>
+          <el-button size="small" type="danger" @click="refundBatch">合并退费</el-button>
+        </div>
+        <el-table v-if="refundable.length" :data="refundable" size="small" border style="margin-top:10px"
+          @selection-change="selRefund = $event">
+          <el-table-column type="selection" width="40" />
           <el-table-column label="单号" width="100">
             <template #default="{ row }">{{ { treatment_order: 'TO', prescription: 'CF', sale: 'XC' }[row._type] }}{{ String(row.id).padStart(6, '0') }}</template>
           </el-table-column>
@@ -101,7 +114,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
 import PrintPreview from '../components/PrintPreview.vue'
@@ -113,6 +126,8 @@ const size = 20
 const sourceFilter = ref('')
 const kw = ref('')
 const loading = ref(false)
+const selPending = ref([])
+const selRefund = ref([])
 const refundKw = ref('')
 const refundable = ref([])
 const admissions = ref([])
@@ -145,10 +160,61 @@ async function settle(row, method) {
   try {
     const r = await api('/charges/settle', { method: 'POST', body: { source_type: row._type, source_id: row.id, method } })
     ElMessage.success(`收费成功 ${r.no}`)
-    const d = await api(`/charges/${r.id}`)
-    const { html } = await api('/print/preview', { method: 'POST', body: { template: 'charge', data: { c: d } } })
-    printHtml.value = html
-    printVisible.value = true
+    await showChargeReceipt(r.id)
+    loadPending()
+  } catch (e) { ElMessage.error(e.message) }
+}
+
+const selPendingTotal = computed(() => selPending.value.reduce((s, r) => s + r.total, 0))
+const selRefundTotal = computed(() => selRefund.value.reduce((s, r) => s + r.total, 0))
+
+async function showChargeReceipt(chargeId) {
+  const d = await api(`/charges/${chargeId}`)
+  const { html } = await api('/print/preview', { method: 'POST', body: { template: 'charge', data: { c: d } } })
+  printHtml.value = html
+  printVisible.value = true
+}
+
+async function settleBatch(method) {
+  if (!selPending.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确认为 ${selPending.value[0].patient_name} 合并收款 ¥${selPendingTotal.value.toFixed(2)}（${method}，共 ${selPending.value.length} 张单）吗？`,
+      '合并收费', { type: 'warning' },
+    )
+  } catch { return }
+  try {
+    const r = await api('/charges/settle-batch', {
+      method: 'POST',
+      body: {
+        method,
+        items: selPending.value.map(x => ({ source_type: x._type, source_id: x.id })),
+      },
+    })
+    ElMessage.success(`合并收费成功 ${r.no}，共 ¥${r.total ?? r.amount}`)
+    await showChargeReceipt(r.id)
+    selPending.value = []
+    loadPending()
+  } catch (e) { ElMessage.error(e.message) }
+}
+
+async function refundBatch() {
+  if (!selRefund.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定合并退费 ¥${selRefundTotal.value.toFixed(2)}（共 ${selRefund.value.length} 张单）吗？药品库存将退回。`,
+      '合并退费', { type: 'warning' },
+    )
+  } catch { return }
+  try {
+    const r = await api('/charges/refund-batch', {
+      method: 'POST',
+      body: { items: selRefund.value.map(x => ({ source_type: x._type, source_id: x.id })) },
+    })
+    ElMessage.success(`合并退费成功 ${r.no}`)
+    await showChargeReceipt(r.id)
+    selRefund.value = []
+    searchRefundable()
     loadPending()
   } catch (e) { ElMessage.error(e.message) }
 }
@@ -202,4 +268,6 @@ onMounted(async () => {
 .title { font-size: 17px; font-weight: bold; }
 .content { padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
 .list-head { display: flex; justify-content: space-between; align-items: center; }
+.merge-bar { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; padding: 8px 12px; background: #ecf5ff; border-radius: 6px; font-size: 14px; }
+.merge-bar .hint { color: #888; font-size: 12px; }
 </style>

@@ -12,11 +12,12 @@
       <div style="display:flex;gap:16px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
         <el-input v-model="inForm.supplier" placeholder="供应商（选填）" style="width:220px" maxlength="50" />
         <el-input v-model="inForm.note" placeholder="备注（选填）" style="width:220px" maxlength="200" />
+        <span class="hint">进价自动取自字典（在字典管理中维护），未录进价的药品可在此填写并自动回写字典。</span>
       </div>
       <el-table :data="inForm.lines" size="small" border>
         <el-table-column label="药品" min-width="220">
           <template #default="{ row }">
-            <ItemSelect v-model="row.item_id" :categories="['中药饮片', '中成药', '西药']" @change="() => {}" />
+            <ItemSelect v-model="row.item_id" :categories="['中药饮片', '中成药', '西药']" @change="it => onInItem(row, it)" />
           </template>
         </el-table-column>
         <el-table-column label="数量" width="130">
@@ -26,7 +27,10 @@
         </el-table-column>
         <el-table-column label="进价" width="130">
           <template #default="{ row }">
-            <el-input-number v-model="row.cost" :min="0" :max="999999" :precision="2" size="small" style="width:100%" />
+            <el-tooltip :disabled="!row.lockCost" content="进价固定取自字典，如需调整请在字典管理中修改" placement="top">
+              <el-input-number v-model="row.cost" :min="0" :max="999999" :precision="2" size="small"
+                style="width:100%" :disabled="row.lockCost" />
+            </el-tooltip>
           </template>
         </el-table-column>
         <el-table-column label="批号" width="120">
@@ -164,12 +168,16 @@
     </el-dialog>
 
     <!-- 库存调整 -->
-    <el-dialog v-model="adjustVisible" title="库存调整（报损 / 盘盈亏）" width="420px">
+    <el-dialog v-model="adjustVisible" title="库存调整（报损 / 盘盈亏）" width="440px">
       <el-form label-width="90px">
         <el-form-item label="品名"><span>{{ adjustItem?.name }}（现存 {{ adjustQty }} {{ adjustItem?.unit }}）</span></el-form-item>
         <el-form-item label="调整数量">
           <el-input-number v-model="adjustDelta" :step="1" style="width:160px" />
           <span class="hint">正数=盘盈增加，负数=报损/盘亏减少</span>
+        </el-form-item>
+        <el-form-item label="低库存线">
+          <el-input-number v-model="adjustMinStock" :min="0" :max="999999" :step="1" style="width:160px" />
+          <span class="hint">存量 ≤ 此值时预警（0 表示不预警）</span>
         </el-form-item>
         <el-form-item label="原因"><el-input v-model="adjustNote" maxlength="100" /></el-form-item>
       </el-form>
@@ -191,8 +199,12 @@ const tab = ref('in')
 const loading = ref(false)
 const saving = ref(false)
 
-// 入库登记
-const newInLine = () => ({ item_id: null, qty: 1, cost: 0, batch_no: '', expiry: '' })
+// 入库登记：进价固定取自字典（字典未录进价时允许填写，入库后回写字典）
+const newInLine = () => ({ item_id: null, qty: 1, cost: 0, batch_no: '', expiry: '', lockCost: false })
+function onInItem(row, item) {
+  row.cost = item ? (item.cost || 0) : 0
+  row.lockCost = !!(item && item.cost > 0)
+}
 const inForm = ref({ supplier: '', note: '', lines: [newInLine()] })
 const inTotal = computed(() => inForm.value.lines.reduce((s, l) => s + (l.qty || 0) * (l.cost || 0), 0))
 
@@ -213,6 +225,7 @@ const adjustVisible = ref(false)
 const adjustItem = ref(null)
 const adjustQty = ref(0)
 const adjustDelta = ref(0)
+const adjustMinStock = ref(0)
 const adjustNote = ref('')
 
 // 流水
@@ -254,7 +267,7 @@ async function saveIn() {
   try {
     const r = await api('/stock/in', {
       method: 'POST',
-      body: { supplier: inForm.value.supplier, note: inForm.value.note, lines: lines.map(l => ({ ...l })) },
+      body: { supplier: inForm.value.supplier, note: inForm.value.note, lines: lines.map(({ lockCost, ...l }) => l) },
     })
     ElMessage.success(`入库完成：${r.no}，进价合计 ¥${r.total_cost}`)
     inForm.value = { supplier: '', note: '', lines: [newInLine()] }
@@ -280,19 +293,30 @@ function openAdjust(row) {
   adjustItem.value = row
   adjustQty.value = row.qty
   adjustDelta.value = 0
+  adjustMinStock.value = row.min_stock || 0
   adjustNote.value = ''
   adjustVisible.value = true
 }
 
 async function saveAdjust() {
-  if (!adjustDelta.value) return ElMessage.warning('调整数量不能为 0')
+  if (!adjustDelta.value && adjustMinStock.value === (adjustItem.value.min_stock || 0)) {
+    return ElMessage.warning('调整数量不能为 0（如只改低库存线，请改动低库存线后保存）')
+  }
   saving.value = true
   try {
-    await api('/stock/adjust', {
-      method: 'POST',
-      body: { item_id: adjustItem.value.id, delta: adjustDelta.value, note: adjustNote.value },
-    })
-    ElMessage.success('库存已调整')
+    if (adjustMinStock.value !== (adjustItem.value.min_stock || 0)) {
+      await api(`/stock/${adjustItem.value.id}/min-stock`, {
+        method: 'PUT',
+        body: { min_stock: adjustMinStock.value },
+      })
+    }
+    if (adjustDelta.value) {
+      await api('/stock/adjust', {
+        method: 'POST',
+        body: { item_id: adjustItem.value.id, delta: adjustDelta.value, note: adjustNote.value },
+      })
+    }
+    ElMessage.success('已保存')
     adjustVisible.value = false
     loadStock()
   } catch (e) {
