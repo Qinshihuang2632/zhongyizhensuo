@@ -53,7 +53,7 @@ def _clean(body: RxBody, conn) -> tuple[int | None, str, list, float, float]:
                 "SELECT id FROM admissions WHERE patient_id = ? AND status = '在院'", (body.patient_id,)
             ).fetchone()
             if adm is None:
-                raise HTTPException(400, "该患者当前不在院，请先到「办理出院」办理入院")
+                raise HTTPException(400, "该患者当前不在院，请先到「住院手续」办理入院")
         else:
             adm = conn.execute(
                 "SELECT id FROM admissions WHERE patient_id = ? AND status = '在院'", (body.patient_id,)

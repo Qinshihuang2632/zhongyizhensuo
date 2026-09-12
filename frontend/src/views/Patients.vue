@@ -2,7 +2,7 @@
   <div class="page">
     <header class="topbar">
       <el-button :icon="'Back'" @click="$router.push('/')">返回</el-button>
-      <span class="title">信息登记 · 患者档案</span>
+      <span class="title">患者信息 · 患者档案</span>
       <span style="width:76px"></span>
     </header>
 

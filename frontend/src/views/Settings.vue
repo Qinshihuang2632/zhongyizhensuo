@@ -36,7 +36,10 @@
               <el-button size="small" @click="saveKeep">保存</el-button>
             </span>
           </div>
-          <p class="hint">每天首次启动自动备份一次；「自动」备份超出保留份数后自动清理，「手动」备份永久保留。</p>
+          <p class="hint">
+            自动备份每天生成一份（当天内重复启动不重复生成）；跨天未重启程序时，打开本页会自动补上当天的备份。
+            「自动」备份只保留最近 {{ keepInput }} 份，更早的自动备份被滚动清理；「手动」备份永久保留，绝不自动删除。
+          </p>
           <el-table :data="backups" size="small" max-height="300">
             <el-table-column prop="name" label="备份文件" min-width="240" />
             <el-table-column label="类型" width="80">

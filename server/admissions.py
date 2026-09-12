@@ -28,6 +28,24 @@ class DischargeBody(BaseModel):
     method: str = "现金"
 
 
+class OrdersBody(BaseModel):
+    custom_orders: str = ""
+
+
+@router.put("/{adm_id}/orders")
+def save_orders(adm_id: int, body: OrdersBody):
+    """出院个性化医嘱（打印时附加在固定医嘱之后）。"""
+    if len(body.custom_orders.strip()) > 500:
+        raise HTTPException(400, f"个性化医嘱不能超过 500 字（当前 {len(body.custom_orders.strip())} 字）")
+    row = db.one("SELECT id FROM admissions WHERE id = ?", (adm_id,))
+    if row is None:
+        raise HTTPException(404, "住院记录不存在")
+    with db.tx() as conn:
+        conn.execute("UPDATE admissions SET custom_orders = ? WHERE id = ?",
+                     (body.custom_orders.strip(), adm_id))
+    return {"ok": True}
+
+
 @router.post("")
 def create(body: AdmBody):
     if len(body.note.strip()) > 200:
@@ -116,8 +134,9 @@ def _totals(conn, adm: dict) -> dict:
     docs = {}
     pending = 0.0
     for table in ("treatment_orders", "sales", "prescriptions"):
+        time_col = ", treatment_time" if table == "treatment_orders" else ""
         rows = [dict(r) for r in conn.execute(
-            f"SELECT id, total, status, created_at FROM {table}"
+            f"SELECT id, total, status, created_at{time_col} FROM {table}"
             " WHERE patient_id = ? AND owner_type = '住院' AND status != '已作废'"
             " ORDER BY id", (pid,),
         ).fetchall()]

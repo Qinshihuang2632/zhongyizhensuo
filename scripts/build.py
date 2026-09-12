@@ -71,6 +71,18 @@ def main() -> None:
     print(">>", " ".join(cmd))
     subprocess.run(cmd, check=True, cwd=ROOT)
 
+    # 打包前检查：系统正在运行时，数据目录会被占用，且可能把数据搬出造成混乱
+    probe = subprocess.run(
+        ["tasklist", "/FI", f"IMAGENAME eq {EXE_NAME}.exe"],
+        capture_output=True, text=True,
+    )
+    if EXE_NAME.lower() in (probe.stdout or "").lower():
+        raise SystemExit(
+            "检测到「中医诊所管理系统」正在运行。\n"
+            "请先完全退出系统（退出后确认任务栏无该图标），再重新打包。\n"
+            "（运行中打包会导致数据目录被占用，发布内容也无法与其分离）"
+        )
+
     src = ROOT / "dist" / EXE_NAME
     out = ROOT / "dist" / APP_NAME
     # 重新打包时保留「数据」目录（里面是真实业务数据，绝不随更新丢失）
@@ -79,8 +91,22 @@ def main() -> None:
         data = out / "数据"
         if data.is_dir():
             keep = out.parent / f".数据保留_{int(time.time())}"
-            shutil.move(str(data), str(keep))
-        shutil.rmtree(out)
+            try:
+                shutil.move(str(data), str(keep))
+            except PermissionError:
+                raise SystemExit(
+                    f"无法移动 {data}：发布目录正在被使用（系统可能正在运行）。\n"
+                    "请先完全退出「中医诊所管理系统」后重新打包。"
+                )
+        try:
+            shutil.rmtree(out)
+        except PermissionError:
+            if keep is not None:
+                shutil.move(str(keep), str(out / "数据"))
+            raise SystemExit(
+                f"无法删除 {out}：发布目录正在被使用（系统可能正在运行）。\n"
+                "请先完全退出「中医诊所管理系统」后重新打包。"
+            )
     shutil.copytree(src, out)
     if keep is not None:
         shutil.move(str(keep), str(out / "数据"))

@@ -40,7 +40,7 @@
             <el-input v-model="form.patient_name" placeholder="无档案时填写，留空记为「散户」" maxlength="50" style="width:280px" />
           </el-form-item>
           <el-form-item v-if="form.owner_type === '住院'" label=" ">
-            <span class="hint">住院患者只能从「在院名单」中选择；新患者请先到「办理出院」页面办理入院。</span>
+            <span class="hint">住院患者只能从「在院名单」中选择；新患者请先到「住院手续」页面办理入院。</span>
           </el-form-item>
 
           <el-form-item label="治疗项目">
@@ -74,9 +74,25 @@
               </div>
             </div>
           </el-form-item>
-          <el-form-item label="备注">
-            <el-input v-model="form.note" maxlength="200" style="width:420px" />
-          </el-form-item>
+          <el-row :gutter="12">
+            <el-col :span="10">
+              <el-form-item label="治疗时间">
+                <el-date-picker
+                  v-model="form.treatment_time"
+                  type="datetime"
+                  value-format="YYYY-MM-DD HH:mm"
+                  format="YYYY-MM-DD HH:mm"
+                  placeholder="默认为当前时间，可改为实际治疗时间"
+                  style="width:100%"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="14">
+              <el-form-item label="备注">
+                <el-input v-model="form.note" maxlength="200" />
+              </el-form-item>
+            </el-col>
+          </el-row>
           <div class="actions">
             <el-button type="primary" :loading="saving" @click="save">保存登记（待收费）</el-button>
             <el-button v-if="editingId" @click="cancelEdit">取消修改</el-button>
@@ -116,12 +132,15 @@
           <el-table-column label="金额" width="100">
             <template #default="{ row }">{{ row.total.toFixed(2) }}</template>
           </el-table-column>
+          <el-table-column label="治疗时间" width="140">
+            <template #default="{ row }">{{ row.treatment_time || row.created_at }}</template>
+          </el-table-column>
           <el-table-column label="状态" width="90">
             <template #default="{ row }">
               <el-tag :type="statusType(row.status)" size="small">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="created_at" label="登记时间" width="150" />
+          <el-table-column prop="created_at" label="登记时间" width="140" />
           <el-table-column label="操作" width="200" fixed="right">
             <template #default="{ row }">
               <el-button size="small" :icon="'Printer'" @click="printOne(row)">打印</el-button>
@@ -159,6 +178,7 @@ const form = reactive({
   patient_id: null,
   patient_name: '',
   note: '',
+  treatment_time: '',
   lines: [],
 })
 const saving = ref(false)
@@ -255,6 +275,7 @@ async function save() {
       patient_id: form.patient_id,
       patient_name: form.patient_name,
       note: form.note,
+      treatment_time: form.treatment_time,
       lines: form.lines.filter(l => l.item_id).map(l => ({ item_id: l.item_id, qty: l.qty })),
     }
     if (editingId.value) {
@@ -278,6 +299,7 @@ function resetForm() {
   editingId.value = 0
   resetPatient()
   form.note = ''
+  form.treatment_time = ''
   form.lines = []
 }
 
@@ -294,6 +316,7 @@ async function editOne(row) {
     form.patient_id = o.patient_id
     form.patient_name = o.patient_id ? '' : (o.patient_name === '散户' ? '' : o.patient_name)
     form.note = o.note
+    form.treatment_time = o.treatment_time || ''
     form.lines = o.lines.map(l => ({ item_id: l.item_id, qty: l.qty, price: l.price }))
     window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (e) {

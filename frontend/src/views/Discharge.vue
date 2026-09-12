@@ -2,7 +2,7 @@
   <div class="page">
     <header class="topbar">
       <el-button :icon="'Back'" @click="$router.push('/')">返回</el-button>
-      <span class="title">办理出院</span>
+      <span class="title">住院手续</span>
       <span style="width:76px"></span>
     </header>
 
@@ -65,7 +65,9 @@
           <el-tab-pane label="治疗项目">
             <el-table :data="current.treatments" size="small" border>
               <el-table-column label="单号" width="100"><template #default="{ row }">TO{{ String(row.id).padStart(6, '0') }}</template></el-table-column>
-              <el-table-column prop="created_at" label="时间" width="160" />
+              <el-table-column label="治疗时间" width="140">
+                <template #default="{ row }">{{ row.treatment_time || row.created_at }}</template>
+              </el-table-column>
               <el-table-column prop="status" label="状态" width="90" />
               <el-table-column label="金额" width="100"><template #default="{ row }">¥ {{ row.total.toFixed(2) }}</template></el-table-column>
             </el-table>
@@ -95,7 +97,27 @@
           </el-radio-group>
           <el-button type="danger" :loading="discharging" @click="discharge">结算并办理出院</el-button>
         </div>
-        <p class="hint">出院将把全部待收费单据统一收费，与预交款对冲：差额补收、多缴退回，随后可打印《出院汇总清单》（含出院医嘱）。请先确认处方都已付药。</p>
+
+        <div class="orders-box">
+          <div class="orders-head">
+            <b>出院医嘱</b>
+            <span class="hint">固定医嘱（系统设置→出院医嘱 维护）打印时自动附后；下面可填写本次的个性化医嘱，一并打印。</span>
+          </div>
+          <el-input
+            v-model="customOrders"
+            type="textarea"
+            :rows="3"
+            maxlength="500"
+            show-word-limit
+            placeholder="选填：本次出院的个性化医嘱，如「嘱继续腰部理疗一周」「一周后复查腰椎片」等"
+            style="max-width:680px"
+          />
+          <div style="margin-top:8px">
+            <el-button size="small" type="primary" plain :loading="savingOrders" @click="saveOrders">保存医嘱</el-button>
+          </div>
+        </div>
+
+        <p class="hint" style="margin-top:10px">出院将把全部待收费单据统一收费，与预交款对冲：差额补收、多缴退回，随后可打印《出院汇总清单》（含医嘱）。请先确认处方都已付药。</p>
       </el-card>
     </main>
 
@@ -125,6 +147,8 @@ const newNote = ref('')
 const saving = ref(false)
 const patientOptions = ref([])
 const searching = ref(false)
+const customOrders = ref('')
+const savingOrders = ref(false)
 
 async function load() {
   loading.value = true
@@ -157,7 +181,23 @@ async function admit() {
 async function openOne(row) {
   try {
     current.value = await api(`/admissions/${row.id}`)
+    customOrders.value = current.value.custom_orders || ''
   } catch (e) { ElMessage.error(e.message) }
+}
+
+async function saveOrders() {
+  savingOrders.value = true
+  try {
+    await api(`/admissions/${current.value.id}/orders`, {
+      method: 'PUT',
+      body: { custom_orders: customOrders.value },
+    })
+    ElMessage.success('医嘱已保存，出院打印时一并附上')
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    savingOrders.value = false
+  }
 }
 
 async function discharge() {
@@ -186,6 +226,7 @@ async function discharge() {
           deposits: d.deposits,
           balance: r.balance,
           discharge_orders: d.discharge_orders,
+          custom_orders: customOrders.value,
         },
       },
     })
@@ -208,4 +249,7 @@ onMounted(load)
 .summary { display: flex; gap: 28px; flex-wrap: wrap; font-size: 14px; }
 .summary .k { color: #888; margin-right: 6px; }
 .hint { color: #b45309; font-size: 13px; margin-top: 10px; }
+.orders-box { margin-top: 16px; padding: 12px 14px; background: #f8f9fa; border-radius: 8px; max-width: 720px; }
+.orders-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.orders-head .hint { margin-top: 0; color: #888; }
 </style>

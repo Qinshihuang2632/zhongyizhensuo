@@ -6,7 +6,11 @@
     <td>单号：{{ order.no }}</td>
     <td>对象：{{ order.owner_type }}</td>
     <td>患者：{{ order.patient_name }}</td>
-    <td style="text-align:right">日期：{{ order.created_at }}</td>
+    <td style="text-align:right">治疗时间：{{ order.treatment_time or order.created_at }}</td>
+  </tr>
+  <tr>
+    <td>登记时间：{{ order.created_at }}</td>
+    <td colspan="3" style="text-align:right">打印时间：{{ printed_at }}</td>
   </tr>
 </table>
 <table class="grid">

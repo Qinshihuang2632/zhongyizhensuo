@@ -1,8 +1,11 @@
 """治疗项目登记：住院/散户患者的治疗单。
 
 - 登记时按字典当前售价做快照（item_name/unit/price 存入明细），合计即划价金额。
+- 治疗时间（treatment_time）为实际治疗发生时间，可与登记时间不同，便于按日核查。
 - 状态流转：待收费 →（M5 收费）已收费；待收费可改可作废，作废留痕不删。
 """
+import datetime as dt
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -23,7 +26,20 @@ class OrderBody(BaseModel):
     patient_id: int | None = None
     patient_name: str = ""
     note: str = ""
+    treatment_time: str = ""
     lines: list[OrderLineBody]
+
+
+def _normalize_time(s: str) -> str:
+    s = (s or "").strip()
+    if not s:
+        return dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return dt.datetime.strptime(s, fmt).strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            continue
+    raise HTTPException(400, "治疗时间格式应为 YYYY-MM-DD HH:MM")
 
 
 def _resolve_patient(conn, body: OrderBody) -> tuple[int | None, str]:
@@ -37,7 +53,7 @@ def _resolve_patient(conn, body: OrderBody) -> tuple[int | None, str]:
             "SELECT id FROM admissions WHERE patient_id = ? AND status = '在院'", (body.patient_id,)
         ).fetchone()
         if adm is None:
-            raise HTTPException(400, "该患者当前不在院，请先到「办理出院」办理入院")
+            raise HTTPException(400, "该患者当前不在院，请先到「住院手续」办理入院")
         return body.patient_id, p["name"]
     if body.patient_id is None:
         name = body.patient_name.strip() or "散户"
@@ -89,10 +105,11 @@ def create_order(body: OrderBody):
     with db.tx() as conn:
         pid, pname = _resolve_patient(conn, body)
         lines, total = _build_lines(conn, body.lines)
+        ttime = _normalize_time(body.treatment_time)
         cur = conn.execute(
-            "INSERT INTO treatment_orders (patient_id, patient_name, owner_type, status, note, total)"
-            " VALUES (?, ?, ?, '待收费', ?, ?)",
-            (pid, pname, body.owner_type, body.note.strip(), total),
+            "INSERT INTO treatment_orders (patient_id, patient_name, owner_type, status, note, total,"
+            " treatment_time) VALUES (?, ?, ?, '待收费', ?, ?, ?)",
+            (pid, pname, body.owner_type, body.note.strip(), total, ttime),
         )
         oid = cur.lastrowid
         conn.executemany(
@@ -155,10 +172,11 @@ def update_order(oid: int, body: OrderBody):
             raise HTTPException(400, f"该单已{row['status']}，不能再修改")
         pid, pname = _resolve_patient(conn, body)
         lines, total = _build_lines(conn, body.lines)
+        ttime = _normalize_time(body.treatment_time)
         conn.execute(
             "UPDATE treatment_orders SET patient_id=?, patient_name=?, owner_type=?,"
-            " note=?, total=?, updated_at=datetime('now','localtime') WHERE id=?",
-            (pid, pname, body.owner_type, body.note.strip(), total, oid),
+            " note=?, total=?, treatment_time=?, updated_at=datetime('now','localtime') WHERE id=?",
+            (pid, pname, body.owner_type, body.note.strip(), total, ttime, oid),
         )
         conn.execute("DELETE FROM treatment_order_lines WHERE order_id = ?", (oid,))
         conn.executemany(

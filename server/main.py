@@ -156,6 +156,7 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
 
     @app.get("/api/backup/list")
     def backup_list():
+        backup.auto_backup_if_needed()  # 跨天未重启时，打开本页也能补上当日备份
         return backup.list_backups()
 
     @app.post("/api/backup/create")
