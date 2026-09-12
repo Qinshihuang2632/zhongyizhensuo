@@ -114,7 +114,17 @@ def open_app_window(url: str) -> None:
     webbrowser.open(url)
 
 
+def _ensure_stdio() -> None:
+    """--windowed 打包且双击运行时没有标准输出/错误句柄（sys.stdout/stderr 为 None），
+    uvicorn 等库访问其属性会直接崩溃；指向空设备兜底。"""
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
+
 def main() -> None:
+    _ensure_stdio()
     setup_logging()
 
     existing = find_port()
