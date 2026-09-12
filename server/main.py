@@ -1,10 +1,12 @@
 """FastAPI 应用：鉴权中间件 + 业务 API + 前端静态托管 + 受控关机。
 
-开放接口（无需登录）：/api/health、/api/setup/status、/api/auth/login；
+开放接口（无需登录）：/api/health、/api/setup/status、/api/setup/init、/api/auth/login；
 其余 /api/* 均要求 X-Token 请求头（登录后下发）。
 """
 import json
 import logging
+import time
+import zipfile
 from collections.abc import Callable
 
 from fastapi import FastAPI, HTTPException, Request
@@ -12,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import admissions, audit, auth, backup, charges, db, dictionary, paths, patients, printing, prescriptions, queries, sales, stock, treatments
+from . import admissions, audit, auth, backup, charges, db, dictionary, paths, patients, printing, prescriptions, queries, sales, stock, treatments, updater
 
 logger = logging.getLogger(__name__)
 APP_NAME = "中医诊所管理系统"
@@ -190,6 +192,72 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
     @app.get("/api/audit")
     def audit_list(page: int = 1, size: int = 50):
         return audit.list_log(page, size)
+
+    # ---- 软件更新与数据迁移 ----
+
+    @app.get("/api/update/current")
+    def update_current():
+        return {"version": read_version()}
+
+    @app.post("/api/update/upload")
+    async def update_upload(request: Request):
+        body = await request.body()
+        if not body:
+            raise HTTPException(400, "未收到更新包文件")
+        if len(body) > updater.MAX_UPLOAD:
+            raise HTTPException(400, "更新包超过 300MB，请确认文件是否正确")
+        tmp = paths.data_dir() / f".upload_update_{int(time.time() * 1000)}.zip"
+        tmp.write_bytes(body)
+        try:
+            version = updater.stage_update(tmp)
+        except ValueError as e:
+            tmp.unlink(missing_ok=True)
+            raise HTTPException(400, str(e)) from None
+        except zipfile.BadZipFile:
+            tmp.unlink(missing_ok=True)
+            raise HTTPException(400, "不是有效的 zip 文件") from None
+        finally:
+            tmp.unlink(missing_ok=True)
+        audit.record("准备更新", f"暂存更新包，目标版本 {version}")
+        return {
+            "ok": True,
+            "version": version,
+            "message": "更新已就绪：退出系统并重新打开后自动完成更新（数据不受影响）",
+        }
+
+    @app.get("/api/migration/export")
+    def migration_export():
+        p = backup.export_data_package()
+        audit.record("导出数据包", p.name)
+        return FileResponse(p, filename=p.name, media_type="application/zip")
+
+    @app.post("/api/migration/import")
+    async def migration_import(request: Request):
+        body = await request.body()
+        if not body:
+            raise HTTPException(400, "未收到数据包文件")
+        if len(body) > 500 * 1024 * 1024:
+            raise HTTPException(400, "数据包超过 500MB，请确认文件是否正确")
+        tmp = paths.data_dir() / f".upload_import_{int(time.time() * 1000)}.zip"
+        tmp.write_bytes(body)
+        try:
+            name = backup.import_data_package(tmp)
+        except ValueError as e:
+            tmp.unlink(missing_ok=True)
+            raise HTTPException(400, str(e)) from None
+        except zipfile.BadZipFile:
+            tmp.unlink(missing_ok=True)
+            raise HTTPException(400, "不是有效的 zip 文件") from None
+        finally:
+            tmp.unlink(missing_ok=True)
+        audit.record("导入数据包", f"已存为备份 {name} 并安排恢复")
+        if on_shutdown is not None:
+            on_shutdown()
+        return {
+            "ok": True,
+            "backup": name,
+            "message": "导入已安排，程序即将退出；重新打开后即使用导入的数据",
+        }
 
     # ---- 受控关机 ----
 

@@ -37,7 +37,7 @@
             </span>
           </div>
           <p class="hint">每天首次启动自动备份一次；「自动」备份超出保留份数后自动清理，「手动」备份永久保留。</p>
-          <el-table :data="backups" size="small" max-height="420">
+          <el-table :data="backups" size="small" max-height="300">
             <el-table-column prop="name" label="备份文件" min-width="240" />
             <el-table-column label="类型" width="80">
               <template #default="{ row }">
@@ -56,6 +56,32 @@
               </template>
             </el-table-column>
           </el-table>
+
+          <div class="mig">
+            <div class="mig-title">数据迁移（换电脑）</div>
+            <p class="hint">
+              换电脑三步：①在旧电脑点「导出数据包」得到 zip；②把安装包拷到新电脑安装；
+              ③新电脑点「导入数据包」并选择该 zip。导入前会自动备份当前数据，重启后生效。
+            </p>
+            <el-button type="primary" plain :icon="'Download'" :loading="exporting" @click="exportData">导出数据包</el-button>
+            <el-button plain :icon="'Upload'" @click="importInput?.click()">导入数据包</el-button>
+            <input ref="importInput" type="file" accept=".zip" style="display:none" @change="doImport" />
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="软件更新">
+          <div style="max-width:620px">
+            <p style="margin-top:0">当前版本：<b>v{{ version }}</b></p>
+            <p class="hint">
+              更新方式：收到新版更新包（zip 文件，微信传输或下载均可）后，点下方按钮选择该文件。
+              系统会自动校验并暂存，之后<b>退出系统并重新打开</b>即完成更新，数据不受影响。
+            </p>
+            <el-button type="primary" :icon="'Upload'" :loading="updating" @click="updateInput?.click()">
+              选择更新包并准备更新
+            </el-button>
+            <input ref="updateInput" type="file" accept=".zip" style="display:none" @change="doUpdate" />
+            <p v-if="updateReady" class="ready">✔ {{ updateReady }} 请退出系统并重新打开。</p>
+          </div>
         </el-tab-pane>
 
         <el-tab-pane label="修改密码">          <el-form label-width="100px" style="max-width:480px">
@@ -111,7 +137,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { api } from '../api'
+import { api, getToken } from '../api'
 import PrintPreview from '../components/PrintPreview.vue'
 import Dictionary from '../components/Dictionary.vue'
 import StockManager from '../components/StockManager.vue'
@@ -131,6 +157,80 @@ const auditItems = ref([])
 const auditTotal = ref(0)
 const auditPage = ref(1)
 const auditSize = 50
+const exporting = ref(false)
+const updating = ref(false)
+const updateReady = ref('')
+const importInput = ref(null)
+const updateInput = ref(null)
+
+async function uploadRaw(path, file) {
+  const res = await fetch('/api' + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream', 'X-Token': getToken() },
+    body: await file.arrayBuffer(),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (res.status === 401) {
+    localStorage.removeItem('zyzs_token')
+    location.hash = '#/login'
+    throw new Error('未登录或登录已过期')
+  }
+  if (!res.ok) throw new Error(data.detail || `请求失败（${res.status}）`)
+  return data
+}
+
+async function exportData() {
+  exporting.value = true
+  try {
+    const res = await fetch('/api/migration/export', { headers: { 'X-Token': getToken() } })
+    if (!res.ok) throw new Error('导出失败（' + res.status + '）')
+    const blob = await res.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `数据包_${new Date().toISOString().slice(0, 10)}.zip`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    ElMessage.success('数据包已导出，请保存到 U 盘或微信发送到新电脑')
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function doImport(ev) {
+  const file = ev.target.files?.[0]
+  ev.target.value = ''
+  if (!file) return
+  try {
+    await ElMessageBox.confirm(
+      `确定导入「${file.name}」吗？导入前会自动备份当前数据；确认后程序将退出，重新打开即使用导入的数据。`,
+      '导入数据包', { type: 'warning', confirmButtonText: '导入并退出', cancelButtonText: '取消' },
+    )
+  } catch { return }
+  try {
+    await uploadRaw('/migration/import', file)
+    ElMessage.success('导入已安排，程序即将退出…')
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
+
+async function doUpdate(ev) {
+  const file = ev.target.files?.[0]
+  ev.target.value = ''
+  if (!file) return
+  updating.value = true
+  try {
+    const r = await uploadRaw('/update/upload', file)
+    updateReady.value = r.message
+    ElMessage.success(`更新包已就绪（v${r.version}）`)
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    updating.value = false
+  }
+}
 
 async function loadAll() {
   const health = await api('/health')
@@ -244,4 +344,7 @@ async function previewTest() {
 .rows { display: grid; gap: 10px; font-size: 14px; }
 .rows .k { display: inline-block; width: 90px; color: #888; }
 .mono { font-family: Consolas, monospace; word-break: break-all; }
+.mig { margin-top: 18px; padding: 12px 14px; background: #f8f9fa; border-radius: 8px; }
+.mig-title { font-weight: bold; margin-bottom: 6px; }
+.ready { color: #0a7d43; font-size: 14px; }
 </style>

@@ -16,7 +16,7 @@ import webbrowser
 
 import uvicorn
 
-from server import paths
+from server import paths, updater
 from server.main import create_app
 
 logger = logging.getLogger("zyzs")
@@ -126,6 +126,20 @@ def _ensure_stdio() -> None:
 def main() -> None:
     _ensure_stdio()
     setup_logging()
+
+    # 应用暂存的更新（若有）：必须在创建任何服务之前完成文件替换
+    try:
+        applied = updater.apply_pending_update()
+        if applied:
+            logger.info("已应用更新，当前版本 %s", applied)
+    except Exception:
+        logger.exception("应用更新失败，按原版本继续启动")
+    finally:
+        # 每次启动都清理历史更新留下的 *.old 让位文件
+        try:
+            updater.cleanup_old_files()
+        except Exception:
+            pass
 
     existing = find_port()
     if existing is not None and not _port_free(existing):

@@ -9,9 +9,11 @@
   下次启动在起服务之前（db.migrate 开头）完成替换。
 """
 import datetime as dt
+import json
 import re
 import shutil
 import sqlite3
+import zipfile
 from pathlib import Path
 
 from . import db, paths
@@ -97,6 +99,59 @@ def schedule_restore(name: str) -> None:
     # 恢复前给当前数据做一次安全备份（manual_ 前缀，不参与自动清理）
     create("manual")
     (paths.data_dir() / PENDING_RESTORE).write_text(name, encoding="utf-8")
+
+
+def export_data_package() -> Path:
+    """导出数据包：一致快照 clinic.db 打成 zip，供换电脑迁移。"""
+    ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = paths.data_dir() / f"数据包_{ts}.zip"
+    tmp = paths.data_dir() / f".export_{ts}.db"
+    conn = _fresh_connection()
+    try:
+        conn.execute("VACUUM INTO ?", (str(tmp),))
+    finally:
+        conn.close()
+    try:
+        _quick_check(tmp)
+        version = "dev"
+        vf = paths.version_file()
+        if vf.exists():
+            try:
+                version = str(json.loads(vf.read_text(encoding="utf-8")).get("version", "dev"))
+            except Exception:
+                pass
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
+            z.write(tmp, "clinic.db")
+            z.writestr("meta.txt", (
+                "中医诊所管理系统数据包\n"
+                f"导出时间: {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"程序版本: {version}\n"
+            ))
+    finally:
+        tmp.unlink(missing_ok=True)
+    return dest
+
+
+def import_data_package(zpath: Path) -> str:
+    """导入数据包：校验后存为手动备份并安排恢复（重启生效）。返回备份名。"""
+    with zipfile.ZipFile(zpath) as z:
+        names = set(z.namelist())
+        if "clinic.db" not in names:
+            raise ValueError("数据包缺少 clinic.db，不是有效的数据包")
+        ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        tmp = paths.data_dir() / f".import_{ts}.db"
+        with z.open("clinic.db") as src, open(tmp, "wb") as f:
+            shutil.copyfileobj(src, f)
+    try:
+        _quick_check(tmp)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise ValueError("数据包中的 clinic.db 校验失败，文件可能损坏") from None
+    ts2 = dt.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    name = f"manual_import_{ts2}.db"
+    shutil.move(str(tmp), str(paths.backup_dir() / name))
+    schedule_restore(name)
+    return name
 
 
 def apply_pending_restore() -> str | None:
