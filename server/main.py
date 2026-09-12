@@ -279,7 +279,9 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
             return JSONResponse({"detail": "Not Found"}, status_code=404)
         candidate = (frontend / full_path).resolve()
         if candidate.is_file() and str(candidate).startswith(str(frontend.resolve())):
-            return FileResponse(candidate)
-        return FileResponse(index_file)
+            # 带 hash 的静态资源可长缓存；其余（index.html）禁缓存，保证更新后界面即时生效
+            cache = "public, max-age=86400" if "/assets/" in full_path else "no-store"
+            return FileResponse(candidate, headers={"Cache-Control": cache})
+        return FileResponse(index_file, headers={"Cache-Control": "no-store"})
 
     return app
