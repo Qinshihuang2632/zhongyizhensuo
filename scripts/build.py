@@ -24,6 +24,7 @@ def build_installer(ver: str) -> Path:
     subprocess.run(
         [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
          "--onefile", "--windowed", "--name", "一键安装",
+         "--icon", str(ROOT / "assets" / "app.ico"),
          str(ROOT / "scripts" / "installer.py")],
         check=True, cwd=ROOT,
     )
@@ -59,6 +60,7 @@ def main() -> None:
         sys.executable, "-m", "PyInstaller",
         "--noconfirm", "--clean",
         "--name", EXE_NAME,
+        "--icon", str(ROOT / "assets" / "app.ico"),
         "--add-data", str(ROOT / "server" / "migrations") + ";server/migrations",
         "--add-data", str(ROOT / "server" / "print_templates") + ";server/print_templates",
         "--add-data", str(ROOT / "frontend" / "dist") + ";frontend/dist",
