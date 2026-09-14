@@ -131,6 +131,22 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
 import PrintPreview from '../components/PrintPreview.vue'
 
+async function maybeGrantCard(pid, name) {
+  if (!pid) return
+  try {
+    await ElMessageBox.confirm(
+      `本次出院已结算。是否认定 ${name} 已治愈，授予保健卡？（获卡日=今天）`,
+      '保健卡判定', { type: 'success', confirmButtonText: '授予保健卡', cancelButtonText: '不授予' },
+    )
+  } catch { return }
+  try {
+    await api(`/cards/${pid}/grant`, { method: 'POST', body: {} })
+    ElMessage.success(`已为 ${name} 授予保健卡`)
+  } catch (e) {
+    ElMessage.info(e.message)
+  }
+}
+
 const list = ref([])
 const total = ref(0)
 const page = ref(1)
@@ -211,6 +227,7 @@ async function discharge() {
   try {
     const r = await api(`/admissions/${current.value.id}/discharge`, { method: 'POST', body: { method: method.value } })
     ElMessage.success(`出院完成，${r.balance >= 0 ? '补收' : '退回'} ¥${Math.abs(r.balance).toFixed(2)}`)
+    await maybeGrantCard(current.value.patient_id, current.value.patient_name)
     const d = await api(`/admissions/${current.value.id}`)
     const { html } = await api('/print/preview', {
       method: 'POST',

@@ -33,10 +33,17 @@
         <el-table-column prop="phone" label="电话" width="130" />
         <el-table-column prop="address" label="地址" min-width="140" show-overflow-tooltip />
         <el-table-column prop="allergy_history" label="过敏史" min-width="110" show-overflow-tooltip />
+        <el-table-column label="保健卡" width="80">
+          <template #default="{ row }">
+            <el-tag v-if="row.has_card" type="success" size="small">有</el-tag>
+            <el-tag v-else type="info" size="small">无</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="created_at" label="建档时间" width="150" />
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="openEdit(row)">修改</el-button>
+            <el-button size="small" @click="openCard(row)">保健卡</el-button>
             <el-button size="small" type="primary" plain :icon="'Printer'" @click="printOne(row)">打印</el-button>
           </template>
         </el-table-column>
@@ -89,6 +96,54 @@
     </el-dialog>
 
     <PrintPreview v-model:visible="printVisible" :html="printHtml" />
+
+    <!-- 保健卡管理 -->
+    <el-dialog v-model="cardVisible" :title="`保健卡 · ${cardRow?.name || ''}`" width="680px">
+      <div v-if="cardInfo">
+        <div v-if="!cardInfo.has_card" class="card-none">
+          <p>该患者暂无保健卡。</p>
+          <el-button type="primary" @click="grantCard">授予保健卡（自今日起算权益）</el-button>
+        </div>
+        <template v-else>
+          <p class="card-since">
+            获卡日期：<b>{{ cardInfo.since }}</b>
+            <span class="rule">权益窗口自获卡后第 61 天起，每 180 天一轮（30 天），期内可任选连续 7 天使用。</span>
+          </p>
+          <el-table :data="cardInfo.windows" size="small" border max-height="400">
+            <el-table-column label="轮次" width="64">
+              <template #default="{ row }">第 {{ row.index }} 轮</template>
+            </el-table-column>
+            <el-table-column label="权益窗口" width="190">
+              <template #default="{ row }">{{ row.start }} ~ {{ row.end }}</template>
+            </el-table-column>
+            <el-table-column label="状态" width="150">
+              <template #default="{ row }">
+                <el-tag size="small" :type="statusTag(row.status)">{{ row.status }}</el-tag>
+                <div v-if="row.status === '未生效'" class="sub">{{ row.days_to_start }} 天后生效 · 提醒{{ row.remind_confirmed ? '已确认' : '待确认' }}</div>
+                <div v-if="row.status === '已使用'" class="sub">{{ row.usage_start }} ~ {{ row.usage_end }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="开始使用（即日起 7 天）" min-width="230">
+              <template #default="{ row }">
+                <template v-if="row.status === '可使用'">
+                  <el-date-picker
+                    v-model="row.startDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    :disabled-date="(d) => disableUsageDate(d, row)"
+                    placeholder="选择开始日"
+                    size="small"
+                    style="width:140px"
+                  />
+                  <el-button size="small" type="primary" @click="startUsage(row)">开始使用</el-button>
+                </template>
+                <span v-else-if="row.status === '已过期'" class="sub">该轮未使用，已失效</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -196,6 +251,69 @@ async function printOne(row) {
   }
 }
 
+// ---- 保健卡 ----
+const cardVisible = ref(false)
+const cardRow = ref(null)
+const cardInfo = ref(null)
+
+async function openCard(row) {
+  cardRow.value = row
+  cardInfo.value = null
+  cardVisible.value = true
+  await loadCard()
+}
+
+async function loadCard() {
+  cardInfo.value = await api(`/cards/${cardRow.value.id}`)
+  // 未生效窗口的"开始使用"日期默认为窗口首日（可改为窗口内任意连续7天的起点）
+  for (const w of cardInfo.value.windows || []) {
+    if (w.status === '可使用' && !w.startDate) {
+      const today = new Date().toISOString().slice(0, 10)
+      w.startDate = today >= w.start && addDays(today, 6) <= w.end ? today : w.start
+    }
+  }
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(dateStr)
+  d.setDate(d.getDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+function disableUsageDate(d, row) {
+  const s = d.toISOString().slice(0, 10)
+  return s < row.start || addDays(s, 6) > row.end
+}
+
+function statusTag(s) {
+  return { 已使用: 'success', 可使用: 'warning', 未生效: 'info', 已过期: 'danger' }[s] || 'info'
+}
+
+async function grantCard() {
+  try {
+    await api(`/cards/${cardRow.value.id}/grant`, { method: 'POST', body: {} })
+    ElMessage.success('已授予保健卡')
+    await loadCard()
+    load()
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
+
+async function startUsage(row) {
+  if (!row.startDate) return ElMessage.warning('请选择开始日期')
+  try {
+    const r = await api(`/cards/${cardRow.value.id}/start`, {
+      method: 'POST',
+      body: { window_index: row.index, start_date: row.startDate },
+    })
+    ElMessage.success(`权益已开始：${r.start} ~ ${r.end}`)
+    await loadCard()
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -205,4 +323,8 @@ onMounted(load)
 .title { font-size: 17px; font-weight: bold; }
 .content { padding: 20px 24px; }
 .bar { display: flex; gap: 16px; margin-bottom: 14px; }
+.card-none { text-align: center; padding: 10px 0; }
+.card-since { margin-top: 0; }
+.card-since .rule { display: block; color: #909399; font-size: 12px; margin-top: 4px; }
+.sub { color: #909399; font-size: 12px; margin-top: 2px; }
 </style>

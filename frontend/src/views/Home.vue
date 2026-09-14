@@ -47,6 +47,41 @@
     </main>
 
     <div v-if="exited" class="exited">系统已退出，如窗口未自动关闭请手动关闭本窗口。</div>
+
+    <!-- 保健卡权益提醒：确认前每次登录都会弹出（跨重启） -->
+    <el-dialog
+      v-model="cardRemindVisible"
+      title="保健卡权益提醒"
+      width="560px"
+      top="6vh"
+      :close-on-click-modal="false"
+    >
+      <div v-if="cardReminders.length" class="remind-wrap">
+        <div class="remind-summary" @click="remindExpanded = !remindExpanded">
+          <el-icon :size="16"><Bell /></el-icon>
+          <span>共 <b>{{ cardReminders.length }}</b> 位患者的保健卡权益需要提醒
+          <span class="fold-tip">（点击{{ remindExpanded ? '收起' : '展开' }}）</span></span>
+        </div>
+        <div v-show="remindExpanded" class="remind-list">
+          <div v-for="r in cardReminders" :key="r.patient_id + '-' + r.window_index" class="remind-item">
+            <div class="line1">
+              <b>{{ r.patient_name }}</b>
+              <span class="phone">电话：{{ r.phone || '—' }}</span>
+            </div>
+            <div class="line2">
+              权益时间：{{ r.start }} ~ {{ r.end }}
+              <el-tag size="small" :type="r.effective ? 'warning' : 'info'">
+                {{ r.effective ? '已生效，请尽快安排来店' : `${r.days_to_start} 天后生效` }}
+              </el-tag>
+            </div>
+            <div class="line3">
+              <el-button size="small" type="primary" @click="confirmRemind(r)">确认已提醒患者</el-button>
+            </div>
+          </div>
+        </div>
+        <div class="remind-tip">确认前，每次登录系统都会持续提醒；关闭系统不会丢失提醒。</div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -87,7 +122,33 @@ onMounted(async () => {
   const cfg = await api('/settings')
   lastAutoBackup.value = cfg.last_auto_backup || ''
   backupKeep.value = cfg.backup_keep || 30
+  loadCardReminders()
 })
+
+const cardReminders = ref([])
+const cardRemindVisible = ref(false)
+const remindExpanded = ref(true)
+
+async function loadCardReminders() {
+  try {
+    cardReminders.value = await api('/cards/reminders')
+    if (cardReminders.value.length) {
+      cardRemindVisible.value = true
+      remindExpanded.value = cardReminders.value.length <= 3
+    }
+  } catch { /* 提醒加载失败不阻塞主界面 */ }
+}
+
+async function confirmRemind(r) {
+  try {
+    await api(`/cards/${r.patient_id}/reminders/${r.window_index}/confirm`, { method: 'POST' })
+    cardReminders.value = cardReminders.value.filter(x => x !== r)
+    if (!cardReminders.value.length) cardRemindVisible.value = false
+    ElMessage.success('已记录提醒')
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
 
 async function shutdown() {
   try {
@@ -117,4 +178,14 @@ async function shutdown() {
 .status .k { display: inline-block; width: 120px; color: #888; }
 .mono { font-family: Consolas, monospace; word-break: break-all; }
 .exited { position: fixed; inset: 0; background: rgba(0,0,0,.72); color: #fff; font-size: 22px; display: flex; align-items: center; justify-content: center; }
+.remind-wrap { font-size: 14px; }
+.remind-summary { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #fdf6ec; border: 1px solid #f5dab1; border-radius: 6px; cursor: pointer; }
+.fold-tip { color: #909399; font-size: 12px; }
+.remind-list { margin-top: 10px; max-height: 44vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.remind-item { border: 1px solid #ebeef5; border-radius: 8px; padding: 10px 12px; }
+.remind-item .line1 { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.remind-item .phone { color: #666; }
+.remind-item .line2 { color: #555; margin-bottom: 8px; }
+.remind-item .line3 { text-align: right; }
+.remind-tip { margin-top: 10px; color: #909399; font-size: 12px; }
 </style>

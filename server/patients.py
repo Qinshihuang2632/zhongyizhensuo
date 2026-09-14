@@ -64,6 +64,7 @@ def _clean(body: PatientBody) -> tuple:
 def _to_dict(row) -> dict:
     d = dict(row)
     d["no"] = f"{d['id']:06d}"
+    d["has_card"] = bool(d.get("card_since"))
     return d
 
 

@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import admissions, audit, auth, backup, charges, db, dictionary, paths, patients, printing, prescriptions, queries, sales, stock, treatments, updater
+from . import admissions, audit, auth, backup, cards, charges, db, dictionary, paths, patients, printing, prescriptions, queries, sales, stock, treatments, updater
 
 logger = logging.getLogger(__name__)
 APP_NAME = "中医诊所管理系统"
@@ -74,6 +74,7 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
     app.include_router(sales.router)
     app.include_router(charges.router)
     app.include_router(admissions.router)
+    app.include_router(cards.router)
     app.include_router(queries.router)
 
     @app.middleware("http")

@@ -160,6 +160,7 @@ async function settle(row, method) {
   try {
     const r = await api('/charges/settle', { method: 'POST', body: { source_type: row._type, source_id: row.id, method } })
     ElMessage.success(`收费成功 ${r.no}`)
+    await maybeGrantCard(row.patient_id, row.patient_name)
     await showChargeReceipt(r.id)
     loadPending()
   } catch (e) { ElMessage.error(e.message) }
@@ -167,6 +168,22 @@ async function settle(row, method) {
 
 const selPendingTotal = computed(() => selPending.value.reduce((s, r) => s + r.total, 0))
 const selRefundTotal = computed(() => selRefund.value.reduce((s, r) => s + r.total, 0))
+
+async function maybeGrantCard(pid, name) {
+  if (!pid) return  // 无档案散户不涉及保健卡
+  try {
+    await ElMessageBox.confirm(
+      `本次已结算。是否认定 ${name} 已治愈，授予保健卡？（获卡日=今天）`,
+      '保健卡判定', { type: 'success', confirmButtonText: '授予保健卡', cancelButtonText: '不授予' },
+    )
+  } catch { return }
+  try {
+    await api(`/cards/${pid}/grant`, { method: 'POST', body: {} })
+    ElMessage.success(`已为 ${name} 授予保健卡`)
+  } catch (e) {
+    ElMessage.info(e.message)
+  }
+}
 
 async function showChargeReceipt(chargeId) {
   const d = await api(`/charges/${chargeId}`)
@@ -192,6 +209,7 @@ async function settleBatch(method) {
       },
     })
     ElMessage.success(`合并收费成功 ${r.no}，共 ¥${r.total ?? r.amount}`)
+    await maybeGrantCard(selPending.value[0]?.patient_id, selPending.value[0]?.patient_name)
     await showChargeReceipt(r.id)
     selPending.value = []
     loadPending()
