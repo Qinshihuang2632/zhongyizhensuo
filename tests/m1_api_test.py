@@ -86,10 +86,10 @@ def phase_start():
 
     r = call("POST", "/api/backup/create")
     backup_name = r.get("name", "")
-    check("手动备份成功", backup_name.startswith("manual_"))
+    check("手动备份成功", backup_name.startswith("manual_backup_"))
     lst = call("GET", "/api/backup/list")
     names = [b["name"] for b in lst]
-    check("启动自动备份存在", any(n.startswith("clinic_") for n in names), str(names))
+    check("启动自动备份存在", any(n.startswith("auto_backup_") for n in names), str(names))
 
     call("PUT", "/api/settings", {"values": {"clinic_name": "测试诊所B"}})  # 备份后改数据
 

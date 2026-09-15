@@ -1,9 +1,14 @@
 """备份与恢复。
 
+命名规则：
+  自动备份  auto_backup_YYYYMMDD_HHMMSS.db   （每天首启一份，超出保留份数滚动清理）
+  手动备份  manual_backup_YYYYMMDD_HHMMSS.db （永不自动清理）
+  兼容旧版  clinic_* / manual_* 等历史文件照常列出；旧式自动备份同样参与清理。
+
 - create()：用 SQLite 的 VACUUM INTO 生成一致、紧凑的快照文件。
 - auto_backup_if_needed()：每天首次启动自动备份一次（幂等）。
-- cleanup()：只清理 clinic_ 前缀的自动备份，保留最近 N 份（N 可配置）；
-  manual_ / restore_before_ 前缀的手动备份永不自动删除。
+- cleanup()：只清理自动前缀的备份，保留最近 N 份（N 可配置）；
+  manual 前缀的手动备份永不自动删除。
 - schedule_restore() / apply_pending_restore()：服务运行时数据库文件被占用，
   不能直接覆盖，因此恢复分两步——先做安全备份并写「待恢复」标记、程序退出；
   下次启动在起服务之前（db.migrate 开头）完成替换。
@@ -18,9 +23,23 @@ from pathlib import Path
 
 from . import db, paths
 
-AUTO_PREFIX = "clinic_"
+AUTO_PREFIX = "auto_backup_"
+LEGACY_AUTO_PREFIX = "clinic_"
 PENDING_RESTORE = "clinic.db.pending_restore"
 _NAME_RE = re.compile(r"^[A-Za-z0-9_]+\.db$")
+_TS_RE = re.compile(r"(\d{8})_(\d{6})")
+
+
+def _name_sort_key(p: Path) -> str:
+    """从文件名提取时间串用于按时间排序；取不到时回退文件修改时间。"""
+    m = _TS_RE.search(p.name)
+    if m:
+        return m.group(1) + m.group(2)
+    return dt.datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y%m%d%H%M%S")
+
+
+def _is_auto(name: str) -> bool:
+    return name.startswith((AUTO_PREFIX, LEGACY_AUTO_PREFIX))
 
 
 def _fresh_connection() -> sqlite3.Connection:
@@ -29,10 +48,11 @@ def _fresh_connection() -> sqlite3.Connection:
 
 
 def create(kind: str = "manual") -> str:
-    # 带微秒，避免同一秒内两次备份（如恢复前的安全备份）文件名碰撞
-    ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    prefix = AUTO_PREFIX if kind == "auto" else "manual_"
+    prefix = AUTO_PREFIX if kind == "auto" else "manual_backup_"
+    ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     dest = paths.backup_dir() / f"{prefix}{ts}.db"
+    if dest.exists():  # 同一秒内的第二次备份（如恢复前安全备份）追加微秒防重名
+        dest = paths.backup_dir() / f"{prefix}{ts}_{dt.datetime.now().microsecond:06d}.db"
     conn = _fresh_connection()
     try:
         conn.execute("VACUUM INTO ?", (str(dest),))
@@ -51,7 +71,11 @@ def cleanup(keep: int | None = None) -> int:
         except ValueError:
             keep = 30
     keep = max(1, keep)
-    autos = sorted(paths.backup_dir().glob(f"{AUTO_PREFIX}*.db"))
+    autos = sorted(
+        list(paths.backup_dir().glob(f"{AUTO_PREFIX}*.db"))
+        + list(paths.backup_dir().glob(f"{LEGACY_AUTO_PREFIX}*.db")),
+        key=_name_sort_key,
+    )
     removed = 0
     for old in autos[:-keep]:
         old.unlink(missing_ok=True)
@@ -71,11 +95,14 @@ def list_backups() -> list[dict]:
     for p in paths.backup_dir().glob("*.db"):
         items.append({
             "name": p.name,
-            "kind": "auto" if p.name.startswith(AUTO_PREFIX) else "manual",
+            "kind": "auto" if _is_auto(p.name) else "manual",
             "size": p.stat().st_size,
             "mtime": dt.datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
+            "_sort": _name_sort_key(p),
         })
-    items.sort(key=lambda x: x["name"], reverse=True)
+    items.sort(key=lambda x: x["_sort"], reverse=True)  # 纯按时间倒序（最新在前）
+    for it in items:
+        it.pop("_sort", None)
     return items
 
 
