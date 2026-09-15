@@ -28,24 +28,6 @@ class DischargeBody(BaseModel):
     method: str = "现金"
 
 
-class OrdersBody(BaseModel):
-    custom_orders: str = ""
-
-
-@router.put("/{adm_id}/orders")
-def save_orders(adm_id: int, body: OrdersBody):
-    """出院个性化医嘱（打印时附加在固定医嘱之后）。"""
-    if len(body.custom_orders.strip()) > 500:
-        raise HTTPException(400, f"个性化医嘱不能超过 500 字（当前 {len(body.custom_orders.strip())} 字）")
-    row = db.one("SELECT id FROM admissions WHERE id = ?", (adm_id,))
-    if row is None:
-        raise HTTPException(404, "住院记录不存在")
-    with db.tx() as conn:
-        conn.execute("UPDATE admissions SET custom_orders = ? WHERE id = ?",
-                     (body.custom_orders.strip(), adm_id))
-    return {"ok": True}
-
-
 @router.post("")
 def create(body: AdmBody):
     if len(body.note.strip()) > 200:

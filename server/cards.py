@@ -126,6 +126,26 @@ def grant(pid: int, body: dict | None = None):
     return {"ok": True, "since": d.isoformat()}
 
 
+@router.post("/{pid}/since")
+def set_since(pid: int, body: dict):
+    """调整已有保健卡的起始日期（老患者建档用）：全部权益窗口随之重算。"""
+    since = (body or {}).get("since") or ""
+    try:
+        d = dt.date.fromisoformat(since)
+    except ValueError:
+        raise HTTPException(400, "获卡日期格式应为 YYYY-MM-DD") from None
+    if d > _today():
+        raise HTTPException(400, "获卡日期不能晚于今天")
+    row = _card_row(pid)
+    if not row["card_since"]:
+        raise HTTPException(400, "该患者没有保健卡，请先使用「授予保健卡」")
+    with db.tx() as conn:
+        conn.execute("UPDATE patients SET card_since = ?, updated_at=datetime('now','localtime') WHERE id = ?",
+                     (d.isoformat(), pid))
+    audit.record("调整保健卡起始日期", f"{row['name']} {row['card_since']} → {d.isoformat()}")
+    return {"ok": True, "since": d.isoformat()}
+
+
 @router.get("/{pid}")
 def card_detail(pid: int):
     row = _card_row(pid)

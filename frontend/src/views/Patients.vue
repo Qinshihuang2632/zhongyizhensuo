@@ -125,8 +125,23 @@
         <template v-else>
           <p class="card-since">
             获卡日期：<b>{{ cardInfo.since }}</b>
+            <el-button size="small" link type="primary" @click="startEditSince">调整</el-button>
             <span class="rule">权益窗口自获卡后第 61 天起，每 180 天一轮（30 天），期内可任选连续 7 天使用。</span>
           </p>
+          <div v-if="sinceEditing" class="since-edit">
+            <el-date-picker
+              v-model="sinceInput"
+              type="date"
+              value-format="YYYY-MM-DD"
+              :disabled-date="(d) => d.toISOString().slice(0, 10) > new Date().toISOString().slice(0, 10)"
+              placeholder="选择新的获卡日期（不能晚于今天）"
+              size="small"
+              style="width:200px"
+            />
+            <el-button size="small" type="primary" @click="saveSince">确认调整</el-button>
+            <el-button size="small" @click="sinceEditing = false">取消</el-button>
+            <div class="sub">适用于现实中原已有卡的老患者；调整将重新计算全部权益窗口与提醒，已登记的使用记录不会移动。</div>
+          </div>
           <el-table :data="cardInfo.windows" size="small" border max-height="400">
             <el-table-column label="轮次" width="64">
               <template #default="{ row }">第 {{ row.index }} 轮</template>
@@ -285,12 +300,35 @@ async function printOne(row) {
 const cardVisible = ref(false)
 const cardRow = ref(null)
 const cardInfo = ref(null)
+const sinceEditing = ref(false)
+const sinceInput = ref('')
 
 async function openCard(row) {
   cardRow.value = row
   cardInfo.value = null
+  sinceEditing.value = false
   cardVisible.value = true
   await loadCard()
+}
+
+function startEditSince() {
+  sinceInput.value = cardInfo.value.since
+  sinceEditing.value = true
+}
+
+async function saveSince() {
+  if (!sinceInput.value) return ElMessage.warning('请选择新的获卡日期')
+  try {
+    await api(`/cards/${cardRow.value.id}/since`, {
+      method: 'POST',
+      body: { since: sinceInput.value },
+    })
+    ElMessage.success(`获卡日期已调整为 ${sinceInput.value}，权益窗口与提醒已重算`)
+    sinceEditing.value = false
+    await loadCard()
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
 }
 
 async function loadCard() {
@@ -356,5 +394,6 @@ onMounted(() => { load(); loadConditions() })
 .card-none { text-align: center; padding: 10px 0; }
 .card-since { margin-top: 0; }
 .card-since .rule { display: block; color: #909399; font-size: 12px; margin-top: 4px; }
+.since-edit { margin: 6px 0 4px; padding: 10px 12px; background: #f0f9eb; border-radius: 6px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
 </style>

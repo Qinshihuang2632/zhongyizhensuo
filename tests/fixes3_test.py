@@ -95,18 +95,15 @@ def main():
     to2 = call("POST", "/api/treatment-orders", {"owner_type": "住院", "patient_id": pid,
                                                  "treatment_time": "2026-09-11 10:00",
                                                  "lines": [{"item_id": t1, "qty": 2}]})
-    call("PUT", f"/api/admissions/{adm['id']}/orders",
-         {"custom_orders": "嘱继续腰部理疗一周；一周后复查。"}, token=True)
-    d = call("GET", f"/api/admissions/{adm['id']}")
-    check("个性化医嘱已保存", "腰部理疗" in (d.get("custom_orders") or ""))
-    call("PUT", f"/api/admissions/{adm['id']}/orders", {"custom_orders": "x" * 501}, expect=400)
+    # 个性化医嘱无保存步骤：结算打印时直接取界面文本框内容（此处以入参模拟）
+    custom_orders_text = "嘱继续腰部理疗一周；一周后复查。"
     dc = call("POST", f"/api/admissions/{adm['id']}/discharge", {"method": "现金"})
     d = call("GET", f"/api/admissions/{adm['id']}")
     r = call("POST", "/api/print/preview", {"template": "discharge", "data": {
         "adm": d, "patient": d.get("patient", {}), "treatments": d["treatments"],
         "sales": d["sales"], "prescriptions": d["prescriptions"], "billed": d["billed"],
         "deposits": d["deposits"], "balance": dc.get("balance", 0),
-        "discharge_orders": d["discharge_orders"], "custom_orders": d.get("custom_orders", ""),
+        "discharge_orders": d["discharge_orders"], "custom_orders": custom_orders_text,
     }})
     html = r.get("html", "")
     check("出院清单含固定与个性化医嘱", "按时服药" in html and "腰部理疗" in html)

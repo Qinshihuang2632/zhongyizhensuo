@@ -89,6 +89,17 @@ def main():
     check("窗口3起止(+420~+449)", w[2]["start"] == d(420) and w[2]["end"] == d(449), str(w[2]))
     check("窗口1状态未生效", w[0]["status"] == "未生效")
 
+    # --- 调整起始日期（老患者用）：窗口全部重算，可再调回 ---
+    call("POST", f"/api/cards/{pid}/since", {"since": d(5)}, expect=400)  # 未来日期
+    call("POST", f"/api/cards/{pid}/since", {"since": d(-70)})
+    c = call("GET", f"/api/cards/{pid}")
+    check("调整后获卡日与窗口重算", c.get("since") == d(-70)
+          and c["windows"][0]["start"] == d(-10) and c["windows"][0]["end"] == d(19)
+          and c["windows"][0]["status"] == "可使用", str(c.get("windows", [{}])[0]))
+    call("POST", f"/api/cards/{pid}/since", {"since": d(0)})
+    c = call("GET", f"/api/cards/{pid}")
+    check("再调回今天获卡", c.get("since") == d(0) and c["windows"][0]["start"] == d(60), str(c.get("windows", [{}])[0]))
+
     # --- 提醒：获卡于 53 天前 → 窗口1 还差 7 天生效 ---
     pid2 = call("POST", "/api/patients", {"name": "卡友", "gender": "男", "age": 50, "phone": "13100002222"}).get("id")
     call("POST", f"/api/cards/{pid2}/grant", {"since": d(-53)})
