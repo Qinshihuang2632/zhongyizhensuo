@@ -11,10 +11,11 @@
         <el-tab-pane label="收费流水" name="charges" />
         <el-tab-pane label="出入库流水" name="stock" />
         <el-tab-pane label="综合查询" name="summary" />
-        <el-tab-pane label="日结" name="daily" />
+        <el-tab-pane label="汇总统计" name="daily" />
+        <el-tab-pane label="保健卡使用" name="cardusage" />
       </el-tabs>
 
-      <div class="bar" v-if="tab !== 'daily'">
+      <div class="bar" v-if="!isReportTab">
         <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD"
           start-placeholder="开始日期" end-placeholder="结束日期" style="width:260px" @change="load" />
         <el-select v-if="tab === 'charges'" v-model="chargeType" style="width:120px" @change="load">
@@ -85,11 +86,11 @@
         </el-table>
       </template>
 
-      <!-- 日结 / 月结 / 年结 -->
-      <template v-else>
+      <!-- 汇总统计（日/月/年 + 病人类别） -->
+      <template v-else-if="tab === 'daily'">
         <div class="bar">
           <el-radio-group v-model="reportMode" @change="modeChanged">
-            <el-radio-button value="daily">日结（可选日期范围）</el-radio-button>
+            <el-radio-button value="daily">按日（可选日期范围）</el-radio-button>
             <el-radio-button value="monthly">月结（已结束的整月）</el-radio-button>
             <el-radio-button value="yearly">年结（已结束的整年）</el-radio-button>
           </el-radio-group>
@@ -102,7 +103,7 @@
             value-format="YYYY" placeholder="选择年份" :disabled-date="disableYear" style="width:140px" @change="load" />
           <span class="mode-hint">{{ modeHint }}</span>
         </div>
-        <el-card v-if="daily" style="max-width:640px">
+        <el-card v-if="daily" style="max-width:680px">
           <template #header>
             <div class="list-head">
               <span>{{ modeTitle }} · {{ daily.period }}</span>
@@ -111,6 +112,7 @@
           </template>
           <div class="daily-grid">
             <div><span class="k">收款笔数</span><b>{{ daily.count }}</b></div>
+            <div><span class="k">治疗人次</span><b>{{ daily.treated_count ?? 0 }}</b></div>
             <div><span class="k">净收入（含预交/退费冲抵）</span><b>¥ {{ daily.income.toFixed(2) }}</b></div>
           </div>
           <el-descriptions title="按款类" :column="2" border size="small" style="margin-top:10px">
@@ -122,10 +124,32 @@
           <el-descriptions title="按业务类别（净额）" :column="2" border size="small" style="margin-top:10px">
             <el-descriptions-item v-for="(v, k) in daily.by_category" :key="k" :label="k">¥ {{ v.toFixed(2) }}</el-descriptions-item>
           </el-descriptions>
+          <el-descriptions title="病人类别（按病情标签计人次）" :column="2" border size="small" style="margin-top:10px">
+            <el-descriptions-item v-for="(v, k) in daily.by_condition" :key="k" :label="k">{{ v }} 人次</el-descriptions-item>
+          </el-descriptions>
         </el-card>
       </template>
 
-      <el-pagination v-if="tab !== 'daily'" style="margin-top:12px;justify-content:flex-end"
+      <!-- 保健卡使用统计 -->
+      <template v-else>
+        <div class="bar">
+          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD"
+            start-placeholder="使用开始日" end-placeholder="截止日" style="width:260px" @change="load" />
+          <span class="mode-hint">统计患者使用保健卡权益的次数；权益归属取使用时最近一次入院的病情标签（无住院则用患者当前标签）。</span>
+        </div>
+        <el-card v-if="cardUsage" style="max-width:680px">
+          <div class="daily-grid">
+            <div><span class="k">权益使用总次数</span><b>{{ cardUsage.total_usage }}</b></div>
+            <div><span class="k">使用患者数</span><b>{{ cardUsage.patient_count }}</b></div>
+          </div>
+          <el-descriptions title="按病情标签（使用人次）" :column="2" border size="small" style="margin-top:10px">
+            <el-descriptions-item v-for="(v, k) in cardUsage.by_condition" :key="k" :label="k">{{ v }} 次</el-descriptions-item>
+            <el-descriptions-item v-if="!Object.keys(cardUsage.by_condition).length" label="暂无数据">—</el-descriptions-item>
+          </el-descriptions>
+        </el-card>
+      </template>
+
+      <el-pagination v-if="!isReportTab" style="margin-top:12px;justify-content:flex-end"
         layout="total, prev, pager, next" :total="total" :page-size="size" :current-page="page"
         @current-change="p => { page = p; load() }" />
     </main>
@@ -151,6 +175,7 @@ const chargeType = ref('')
 const moveDir = ref('')
 const loading = ref(false)
 const daily = ref(null)
+const cardUsage = ref(null)
 const reportMode = ref('daily')
 const monthVal = ref('')
 const yearVal = ref('')
@@ -160,6 +185,7 @@ const printHtml = ref('')
 const modeTitle = computed(() =>
   ({ daily: '日结', monthly: '月结单', yearly: '年结单' })[reportMode.value],
 )
+const isReportTab = computed(() => ['daily', 'cardusage'].includes(tab.value))
 const modeHint = computed(() => ({
   daily: '不选日期 = 今天；选范围 = 区间汇总（可看本月至今）',
   monthly: '只能选择已结束的自然月；本月数据请用日结的日期范围查看',
@@ -190,18 +216,28 @@ async function load() {
   try {
     if (tab.value === 'charges') {
       daily.value = null
+      cardUsage.value = null
       const r = await api(`/charges?no_type=${encodeURIComponent(chargeType.value)}&keyword=${encodeURIComponent(kw.value)}${dateParams()}&page=${page.value}&size=${size}`)
       rows.value = r.items
       total.value = r.total
     } else if (tab.value === 'stock') {
+      daily.value = null
+      cardUsage.value = null
       daily.value = null
       const r = await api(`/stock/moves?direction=${encodeURIComponent(moveDir.value)}&keyword=${encodeURIComponent(kw.value)}${dateParams()}&page=${page.value}&size=${size}`)
       rows.value = r.items
       total.value = r.total
     } else if (tab.value === 'summary') {
       daily.value = null
+      cardUsage.value = null
       rows.value = await api(`/queries/patients-summary?keyword=${encodeURIComponent(kw.value)}${dateParams()}`)
       total.value = rows.value.length
+    } else if (tab.value === 'cardusage') {
+      daily.value = null
+      const p = dateRange.value?.length ? `?start=${dateRange.value[0]}&end=${dateRange.value[1]}` : ''
+      cardUsage.value = await api('/reports/card-usage' + p)
+      rows.value = []
+      total.value = 0
     } else {
       try {
         if (reportMode.value === 'monthly') {

@@ -32,7 +32,12 @@
         </el-table-column>
         <el-table-column prop="phone" label="电话" width="130" />
         <el-table-column prop="address" label="地址" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="allergy_history" label="过敏史" min-width="110" show-overflow-tooltip />
+        <el-table-column prop="allergy_history" label="过敏史" min-width="100" show-overflow-tooltip />
+        <el-table-column label="病情" min-width="120">
+          <template #default="{ row }">
+            <el-tag v-for="t in row.condition_tags" :key="t" size="small" style="margin-right:4px">{{ t }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="保健卡" width="80">
           <template #default="{ row }">
             <el-tag v-if="row.has_card" type="success" size="small">有</el-tag>
@@ -87,6 +92,19 @@
         <el-form-item label="地址"><el-input v-model="form.address" maxlength="100" /></el-form-item>
         <el-form-item label="过敏史"><el-input v-model="form.allergy_history" type="textarea" :rows="2" maxlength="500" /></el-form-item>
         <el-form-item label="既往史"><el-input v-model="form.medical_history" type="textarea" :rows="2" maxlength="500" /></el-form-item>
+        <el-form-item label="病情" prop="condition_tags">
+          <el-select
+            v-model="form.condition_tags"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            placeholder="必选：可多选；选项在 系统设置→病情标签 维护"
+            style="width:100%"
+          >
+            <el-option v-for="t in conditionOptions" :key="t.name" :label="t.name" :value="t.name" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.note" type="textarea" :rows="2" maxlength="500" /></el-form-item>
       </el-form>
       <template #footer>
@@ -167,7 +185,7 @@ const printHtml = ref('')
 
 const emptyForm = () => ({
   id: 0, name: '', gender: '', age: null, birth_date: '', phone: '',
-  address: '', allergy_history: '', medical_history: '', note: '',
+  address: '', allergy_history: '', medical_history: '', note: '', condition_tags: [],
 })
 const form = reactive(emptyForm())
 
@@ -176,6 +194,18 @@ const rules = {
   gender: [{ required: true, message: '请选择性别', trigger: 'change' }],
   age: [{ required: true, message: '请填写年龄', trigger: 'blur' }],
   phone: [{ required: true, message: '请填写电话', trigger: 'blur' }],
+  condition_tags: [{
+    required: true,
+    validator: (rule, value, cb) => (value && value.length ? cb() : cb(new Error('请至少选择一项病情'))),
+    trigger: 'change',
+  }],
+}
+
+const conditionOptions = ref([])
+async function loadConditions() {
+  try {
+    conditionOptions.value = await api('/conditions?active=1')
+  } catch { /* 忽略 */ }
 }
 
 function ageOf(birth) {
@@ -241,7 +271,7 @@ async function printOne(row) {
       method: 'POST',
       body: {
         template: 'patient_info',
-        data: { p: { ...p, age: ageOf(p.birth_date) || p.age } },
+        data: { p: { ...p, age: ageOf(p.birth_date) || p.age, tags: (p.condition_tags || []).join('、') } },
       },
     })
     printHtml.value = html
@@ -314,7 +344,7 @@ async function startUsage(row) {
   }
 }
 
-onMounted(load)
+onMounted(() => { load(); loadConditions() })
 </script>
 
 <style scoped>

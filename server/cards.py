@@ -170,10 +170,17 @@ def start_usage(pid: int, body: dict):
         raise HTTPException(
             400, f"开始日期须使连续 {USAGE_DAYS} 天完整落在权益窗口内（{win['start']} ~ {win['end']}）")
     e = s + dt.timedelta(days=USAGE_DAYS - 1)
+    # 权益归属标签：取不晚于开始日的最近一次入院的标签快照；无住院则用患者当前标签
+    from .patients import get_condition_tags
+    adm = db.one(
+        "SELECT condition_tags FROM admissions WHERE patient_id = ? AND id = ("
+        " SELECT MAX(id) FROM admissions WHERE patient_id = ?)", (pid, pid))
+    tags = (adm["condition_tags"] if adm and adm["condition_tags"] not in (None, "", "[]")
+            else get_condition_tags(db.connect(), pid)) or "[]"
     with db.tx() as conn:
         conn.execute(
-            "INSERT INTO card_usages (patient_id, window_index, start_date, end_date)"
-            " VALUES (?, ?, ?, ?)", (pid, win_index, s.isoformat(), e.isoformat()))
+            "INSERT INTO card_usages (patient_id, window_index, start_date, end_date, condition_tags)"
+            " VALUES (?, ?, ?, ?, ?)", (pid, win_index, s.isoformat(), e.isoformat(), tags))
     audit.record("权益开始使用", f"{row['name']} 第{win_index}轮 {s.isoformat()} ~ {e.isoformat()}")
     return {"ok": True, "start": s.isoformat(), "end": e.isoformat()}
 

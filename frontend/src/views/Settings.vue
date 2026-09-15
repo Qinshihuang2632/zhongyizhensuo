@@ -26,6 +26,14 @@
           <StockManager />
         </el-tab-pane>
 
+        <el-tab-pane label="病情标签" lazy>
+          <ConditionTags />
+        </el-tab-pane>
+
+        <el-tab-pane label="保健卡权益" lazy>
+          <CardBenefits />
+        </el-tab-pane>
+
         <el-tab-pane label="备份管理">
           <div class="bar">
             <el-button type="primary" :icon="'Plus'" :loading="backingUp" @click="createBackup">立即备份</el-button>
@@ -144,6 +152,8 @@ import { api, getToken } from '../api'
 import PrintPreview from '../components/PrintPreview.vue'
 import Dictionary from '../components/Dictionary.vue'
 import StockManager from '../components/StockManager.vue'
+import ConditionTags from '../components/ConditionTags.vue'
+import CardBenefits from '../components/CardBenefits.vue'
 
 const form = ref({ clinic_name: '', clinic_address: '', clinic_phone: '' })
 const backups = ref([])

@@ -95,8 +95,9 @@ def main() -> None:
                 shutil.move(str(data), str(keep))
             except PermissionError:
                 raise SystemExit(
-                    f"无法移动 {data}：发布目录正在被使用（系统可能正在运行）。\n"
-                    "请先完全退出「中医诊所管理系统」后重新打包。"
+                    f"无法移动 {data}：发布目录正在被占用（系统可能正在运行，"
+                    "或终端/资源管理器停留在该目录中）。\n"
+                    "请先完全退出「中医诊所管理系统」并关闭占用该目录的窗口后重新打包。"
                 )
         try:
             shutil.rmtree(out)
@@ -104,8 +105,9 @@ def main() -> None:
             if keep is not None:
                 shutil.move(str(keep), str(out / "数据"))
             raise SystemExit(
-                f"无法删除 {out}：发布目录正在被使用（系统可能正在运行）。\n"
-                "请先完全退出「中医诊所管理系统」后重新打包。"
+                f"无法删除 {out}：发布目录正在被占用（系统可能正在运行，"
+                "或终端/资源管理器停留在该目录中）。\n"
+                "请先完全退出「中医诊所管理系统」并关闭占用该目录的窗口后重新打包。"
             )
     shutil.copytree(src, out)
     if keep is not None:

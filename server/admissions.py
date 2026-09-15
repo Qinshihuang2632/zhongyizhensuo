@@ -59,9 +59,11 @@ def create(body: AdmBody):
         ).fetchone()
         if dup:
             raise HTTPException(400, f"该患者已有在院记录（ZY{dup['id']:06d}），请先办理出院")
+        from .patients import get_condition_tags
         cur = conn.execute(
-            "INSERT INTO admissions (patient_id, patient_name, note) VALUES (?, ?, ?)",
-            (body.patient_id, p["name"], body.note.strip()),
+            "INSERT INTO admissions (patient_id, patient_name, note, condition_tags)"
+            " VALUES (?, ?, ?, ?)",
+            (body.patient_id, p["name"], body.note.strip(), get_condition_tags(conn, body.patient_id)),
         )
         adm_id = cur.lastrowid
     audit.record("入院登记", f"ZY{adm_id:06d} {p['name']}")
@@ -107,9 +109,10 @@ def _settle_pending(conn, adm: dict, method: str) -> None:
         for doc in rows:
             conn.execute(
                 "INSERT INTO charges (no_type, owner_type, patient_id, patient_name,"
-                " admission_id, source_type, source_id, amount, method)"
-                " VALUES ('收费', '住院', ?, ?, ?, ?, ?, ?, ?)",
-                (pid, doc["patient_name"], adm["id"], source_type, doc["id"], doc["total"], method),
+                " admission_id, source_type, source_id, amount, method, condition_tags)"
+                " VALUES ('收费', '住院', ?, ?, ?, ?, ?, ?, ?, ?)",
+                (pid, doc["patient_name"], adm["id"], source_type, doc["id"], doc["total"],
+                 method, adm["condition_tags"] or "[]"),
             )
             conn.execute(
                 f"UPDATE {table} SET status='已收费', updated_at=datetime('now','localtime') WHERE id=?",
@@ -194,14 +197,18 @@ def discharge(adm_id: int, body: DischargeBody):
         if balance > 0:
             conn.execute(
                 "INSERT INTO charges (no_type, owner_type, patient_id, patient_name, admission_id,"
-                " amount, method, note) VALUES ('出院结算', '住院', ?, ?, ?, ?, ?, '出院补收')",
-                (adm["patient_id"], adm["patient_name"], adm_id, balance, body.method),
+                " amount, method, note, condition_tags)"
+                " VALUES ('出院结算', '住院', ?, ?, ?, ?, ?, '出院补收', ?)",
+                (adm["patient_id"], adm["patient_name"], adm_id, balance, body.method,
+                 adm["condition_tags"] or "[]"),
             )
         elif balance < 0:
             conn.execute(
                 "INSERT INTO charges (no_type, owner_type, patient_id, patient_name, admission_id,"
-                " amount, method, note) VALUES ('退费', '住院', ?, ?, ?, ?, ?, '出院退回多缴预交款')",
-                (adm["patient_id"], adm["patient_name"], adm_id, balance, "现金"),
+                " amount, method, note, condition_tags)"
+                " VALUES ('退费', '住院', ?, ?, ?, ?, ?, '出院退回多缴预交款', ?)",
+                (adm["patient_id"], adm["patient_name"], adm_id, balance, "现金",
+                 adm["condition_tags"] or "[]"),
             )
         conn.execute(
             "UPDATE admissions SET status='已出院', discharged_at=datetime('now','localtime') WHERE id=?",

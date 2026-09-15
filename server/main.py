@@ -14,13 +14,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import admissions, audit, auth, backup, cards, charges, db, dictionary, paths, patients, printing, prescriptions, queries, sales, stock, treatments, updater
+from . import admissions, audit, auth, backup, cards, charges, conditions, db, dictionary, paths, patients, printing, prescriptions, queries, sales, stock, treatments, updater
 
 logger = logging.getLogger(__name__)
 APP_NAME = "中医诊所管理系统"
 
 _OPEN_PATHS = {"/api/health", "/api/setup/status", "/api/setup/init", "/api/auth/login"}
-_EDITABLE_SETTINGS = {"clinic_name", "clinic_address", "clinic_phone", "backup_keep", "discharge_orders"}
+_EDITABLE_SETTINGS = {"clinic_name", "clinic_address", "clinic_phone", "backup_keep",
+                      "discharge_orders", "card_benefits"}
 
 
 class InitBody(BaseModel):
@@ -75,6 +76,7 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
     app.include_router(charges.router)
     app.include_router(admissions.router)
     app.include_router(cards.router)
+    app.include_router(conditions.router)
     app.include_router(queries.router)
 
     @app.middleware("http")
@@ -149,6 +151,13 @@ def create_app(on_shutdown: Callable[[], None] | None = None) -> FastAPI:
                         raise ValueError
                 except ValueError:
                     raise HTTPException(400, "备份保留份数必须是不小于 1 的整数") from None
+            if key == "card_benefits":
+                try:
+                    v = json.loads(value)
+                    if not isinstance(v, dict):
+                        raise ValueError
+                except ValueError:
+                    raise HTTPException(400, "保健卡权益配置格式不正确") from None
             if key in _EDITABLE_SETTINGS:
                 db.set_setting(key, value)
         return {"ok": True}

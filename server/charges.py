@@ -53,15 +53,17 @@ def _check_same_patient(docs) -> None:
 def _insert_charge(conn, no_type: str, docs, amount: float, method: str,
                    note: str = "", admission_id: int | None = None) -> int:
     """docs: [(doc_row, source_type, source_id), ...]"""
+    from .patients import get_condition_tags
     first = docs[0][0]
     pid = first["patient_id"] if all(d[0]["patient_id"] == first["patient_id"] for d in docs) else None
     owner = docs[0][0]["owner_type"] if len({d[0]["owner_type"] for d in docs}) == 1 else "散户"
+    tags = get_condition_tags(conn, pid) if pid else "[]"
     cur = conn.execute(
         "INSERT INTO charges (no_type, owner_type, patient_id, patient_name, admission_id,"
-        " source_type, source_id, amount, method, note)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " source_type, source_id, amount, method, note, condition_tags)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (no_type, owner, pid, first["patient_name"], admission_id,
-         docs[0][1], docs[0][2], amount, method, note),
+         docs[0][1], docs[0][2], amount, method, note, tags),
     )
     charge_id = cur.lastrowid
     for doc, st, sid in docs:
@@ -245,9 +247,9 @@ def deposit(body: DepositBody):
             raise HTTPException(400, "住院记录不存在或已出院")
         cur = conn.execute(
             "INSERT INTO charges (no_type, owner_type, patient_id, patient_name, admission_id,"
-            " amount, method, note) VALUES ('预交款', '住院', ?, ?, ?, ?, ?, ?)",
+            " amount, method, note, condition_tags) VALUES ('预交款', '住院', ?, ?, ?, ?, ?, ?, ?)",
             (adm["patient_id"], adm["patient_name"], adm["id"], body.amount,
-             body.method, body.note.strip()),
+             body.method, body.note.strip(), adm["condition_tags"] or "[]"),
         )
         charge_id = cur.lastrowid
         detail = f"ZY{adm['id']:06d} {adm['patient_name']} 预交{body.amount}元 {body.method}"

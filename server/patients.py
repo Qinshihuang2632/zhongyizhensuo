@@ -1,8 +1,10 @@
 """患者档案：登记、搜索、修改。编号 = 自增 id 补零显示（如 000012）。
 
-必填：姓名、性别、年龄、电话；出生日期选填（填了则显示时优先按出生日期换算年龄）。
+必填：姓名、性别、年龄、电话、病情（多选标签，选项在系统设置→病情标签维护）；
+出生日期选填（填了则显示时优先按出生日期换算年龄）。
 """
 import datetime as dt
+import json
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -26,6 +28,35 @@ class PatientBody(BaseModel):
     allergy_history: str = ""
     medical_history: str = ""
     note: str = ""
+    condition_tags: list[str] = []
+
+
+def get_condition_tags(conn, pid: int) -> str:
+    """取患者当前病情标签 JSON（供各处快照）。"""
+    row = conn.execute("SELECT condition_tags FROM patients WHERE id = ?", (pid,)).fetchone()
+    return (row["condition_tags"] if row else "[]") or "[]"
+
+
+def _clean_tags(tags: list[str]) -> str:
+    cleaned, seen = [], set()
+    for t in tags:
+        t = (t or "").strip()
+        if not t:
+            continue
+        if len(t) > 30:
+            raise HTTPException(400, f"病情标签「{t}」超过 30 字")
+        if t not in seen:
+            seen.add(t)
+            cleaned.append(t)
+    if len(cleaned) > 8:
+        raise HTTPException(400, "病情标签最多 8 个")
+    if cleaned:
+        names = {r["name"] for r in db.query("SELECT name FROM condition_tags")}
+        if names:
+            unknown = [t for t in cleaned if t not in names]
+            if unknown:
+                raise HTTPException(400, f"病情标签「{'、'.join(unknown)}」不在标签字典中，请先在系统设置里添加")
+    return json.dumps(cleaned, ensure_ascii=False)
 
 
 def _clean(body: PatientBody) -> tuple:
@@ -58,13 +89,18 @@ def _clean(body: PatientBody) -> tuple:
     for key in ("name", "phone", "address", "allergy_history", "medical_history", "note"):
         if len(data[key]) > _LIMITS[key]:
             raise HTTPException(400, f"「{key}」长度不能超过 {_LIMITS[key]} 字")
-    return tuple(data.values())
+    tags_json = _clean_tags(body.condition_tags)
+    return tuple(data.values()) + (tags_json,)
 
 
 def _to_dict(row) -> dict:
     d = dict(row)
     d["no"] = f"{d['id']:06d}"
     d["has_card"] = bool(d.get("card_since"))
+    try:
+        d["condition_tags"] = json.loads(d.get("condition_tags") or "[]")
+    except Exception:
+        d["condition_tags"] = []
     return d
 
 
@@ -94,8 +130,8 @@ def create_patient(body: PatientBody):
     with db.tx() as conn:
         cur = conn.execute(
             "INSERT INTO patients (name, gender, age, birth_date, phone, address,"
-            " allergy_history, medical_history, note)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", values,
+            " allergy_history, medical_history, note, condition_tags)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values,
         )
         return {"id": cur.lastrowid}
 
@@ -116,7 +152,7 @@ def update_patient(pid: int, body: PatientBody):
     with db.tx() as conn:
         cur = conn.execute(
             "UPDATE patients SET name=?, gender=?, age=?, birth_date=?, phone=?, address=?,"
-            " allergy_history=?, medical_history=?, note=?,"
+            " allergy_history=?, medical_history=?, note=?, condition_tags=?,"
             " updated_at=datetime('now','localtime') WHERE id=?", values + (pid,),
         )
         if cur.rowcount == 0:

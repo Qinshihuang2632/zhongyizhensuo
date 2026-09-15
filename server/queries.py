@@ -1,10 +1,12 @@
-"""查询中心与报表：收费流水、出入库流水、患者汇总、日结（支持日期范围）、月结、年结。
+"""查询中心与报表：收费流水、出入库流水、患者汇总、汇总统计（日/月/年+病人类别）、保健卡使用统计。
 
 月结/年结只对"已结束"的周期开放打印：当月/当年未结束时拒绝，
-当月/当年至今的数据通过日结的日期范围查看。
+当月/当年至今的数据通过汇总统计的日期范围查看。
 """
 import calendar
 import datetime as dt
+import json
+from collections import Counter
 
 from fastapi import APIRouter, HTTPException
 
@@ -13,6 +15,36 @@ from . import db
 router = APIRouter(prefix="/api")
 
 _SOURCE_LABEL = {"treatment_order": "治疗项目", "prescription": "中药处方", "sale": "药品销售", "": "其他"}
+
+
+def _parse_tags(s: str) -> list[str]:
+    try:
+        v = json.loads(s or "[]")
+        return v if isinstance(v, list) else []
+    except Exception:
+        return []
+
+
+def _count_condition(rows) -> tuple[Counter, int]:
+    """rows 含 condition_tags 字段：按标签计人次；返回 (计数器, 人次总数)。"""
+    cnt: Counter = Counter()
+    for r in rows:
+        cnt.update(_parse_tags(r["condition_tags"]))
+    return cnt, len(rows)
+
+
+def _count_treated(rows) -> tuple[Counter, int]:
+    """治疗人次：按结算事件去重——住院的多条收费（统一收费+补收）归属同一住院轮次
+    只计 1 人次；散户每张收费单各计 1 人次。标签取该事件首条记录的快照。"""
+    seen: dict[str, str] = {}
+    for r in rows:
+        key = f"adm:{r['admission_id']}" if r["admission_id"] else f"c:{r['id']}"
+        if key not in seen:
+            seen[key] = r["condition_tags"] or "[]"
+    cnt: Counter = Counter()
+    for tags in seen.values():
+        cnt.update(_parse_tags(tags))
+    return cnt, len(seen)
 
 
 def _aggregate(start: str, end: str) -> dict:
@@ -33,6 +65,11 @@ def _aggregate(start: str, end: str) -> dict:
         " AND c.no_type IN ('收费', '出院结算', '退费')"
         " GROUP BY COALESCE(l.source_type, c.source_type, '')", params,
     )}
+    treated_rows = db.query(
+        f"SELECT id, admission_id, condition_tags FROM charges WHERE {conds}"
+        " AND no_type IN ('收费', '出院结算')", params,
+    )
+    cnt, treated_count = _count_treated(treated_rows)
     count = db.one(f"SELECT COUNT(*) AS c FROM charges WHERE {conds}", params)["c"]
     income = round(sum(by_type.values()), 2)
     return {
@@ -41,9 +78,11 @@ def _aggregate(start: str, end: str) -> dict:
         "period": start if start == end else f"{start} 至 {end}",
         "income": income,
         "count": count,
+        "treated_count": treated_count,
         "by_type": by_type,
         "by_method": by_method,
         "by_category": {_SOURCE_LABEL.get(k, k): v for k, v in by_category.items()},
+        "by_condition": dict(cnt.most_common()),
     }
 
 
@@ -89,6 +128,28 @@ def daily(date: str = "", start: str = "", end: str = ""):
     date = date or dt.date.today().isoformat()
     _validate_date(date)
     return _aggregate(date, date)
+
+
+@router.get("/reports/card-usage")
+def card_usage(start: str = "", end: str = ""):
+    """保健卡使用统计：总次数、使用人数、按病情标签的权益使用量（人次口径）。"""
+    params = {}
+    conds = []
+    if start:
+        conds.append("date(start_date) >= :start")
+        params["start"] = start
+    if end:
+        conds.append("date(start_date) <= :end")
+        params["end"] = end
+    where = ("WHERE " + " AND ".join(conds)) if conds else ""
+    rows = db.query(f"SELECT patient_id, condition_tags FROM card_usages {where}", params)
+    cnt, total = _count_condition(rows)
+    patients = {r["patient_id"] for r in rows}
+    return {
+        "total_usage": total,
+        "patient_count": len(patients),
+        "by_condition": dict(cnt.most_common()),
+    }
 
 
 @router.get("/reports/monthly")

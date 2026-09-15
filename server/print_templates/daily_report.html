@@ -21,9 +21,19 @@
   {% endfor %}
 </table>
 <table class="grid" style="margin-top:10px">
-  <tr><th colspan="2">业务类别（收费/出院结算）</th></tr>
+  <tr><th colspan="2">业务类别（净额）</th></tr>
   {% for k, v in by_category.items() %}
   <tr><td>{{ k }}</td><td style="text-align:right">￥ {{ "%.2f" | format(v) }}</td></tr>
   {% endfor %}
+</table>
+<table class="grid" style="margin-top:10px">
+  <tr><th colspan="2">病人类别（按病情标签计人次）</th></tr>
+  <tr><td>治疗人次合计</td><td style="text-align:right">{{ treated_count }} 人次</td></tr>
+  {% for k, v in by_condition.items() %}
+  <tr><td>{{ k }}</td><td style="text-align:right">{{ v }} 人次</td></tr>
+  {% endfor %}
+  {% if not by_condition %}
+  <tr><td colspan="2" style="text-align:center">期内无带病情标签的结算记录</td></tr>
+  {% endif %}
 </table>
 {% endblock %}
