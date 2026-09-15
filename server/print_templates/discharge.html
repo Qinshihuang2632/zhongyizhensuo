@@ -42,12 +42,16 @@
 
 <table class="grid">
   <tr>
-    <th style="width:25%">费用合计</th><td style="width:25%; text-align:right">￥ {{ "%.2f" | format(billed) }}</td>
-    <th style="width:25%">预交款</th><td style="text-align:right">￥ {{ "%.2f" | format(deposits) }}</td>
+    <th style="width:25%">费用合计</th>
+    <td style="width:25%; text-align:right">￥ {{ "%.2f" | format(cost if cost is defined else billed) }}</td>
+    <th style="width:25%">预交款</th>
+    <td style="text-align:right">￥ {{ "%.2f" | format(deposits) }}</td>
   </tr>
   <tr>
-    <th>结算金额（补收）</th><td style="text-align:right">￥ {{ "%.2f" | format(balance) if balance > 0 else "0.00" }}</td>
-    <th>退回预交款</th><td style="text-align:right">￥ {{ "%.2f" | format(-balance) if balance < 0 else "0.00" }}</td>
+    <th>结算金额（补收）</th>
+    <td style="text-align:right">{% if settlement is defined %}￥ {{ "%.2f" | format(settlement) }}{% else %}￥ {{ "%.2f" | format(balance if balance > 0 else 0) }}{% endif %}</td>
+    <th>退回预交款</th>
+    <td style="text-align:right">{% if refunds is defined and refunds < 0 %}￥ {{ "%.2f" | format(-refunds) }}{% elif balance is defined and balance < 0 %}￥ {{ "%.2f" | format(-balance) }}{% else %}￥ 0.00{% endif %}</td>
   </tr>
 </table>
 

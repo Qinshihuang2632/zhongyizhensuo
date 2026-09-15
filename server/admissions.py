@@ -71,13 +71,20 @@ def create(body: AdmBody):
 
 
 @router.get("")
-def list_admissions(status: str = "", keyword: str = "", page: int = 1, size: int = 20):
+def list_admissions(status: str = "", keyword: str = "", start: str = "", end: str = "",
+                    page: int = 1, size: int = 20):
     page = max(1, page)
     size = min(max(1, size), 100)
     conds, params = [], {"offset": (page - 1) * size, "size": size}
     if status in ("在院", "已出院"):
         conds.append("status = :status")
         params["status"] = status
+    if start:
+        conds.append("date(admitted_at) >= :start")
+        params["start"] = start
+    if end:
+        conds.append("date(admitted_at) <= :end")
+        params["end"] = end
     kw = keyword.strip()
     if kw:
         conds.append("(patient_name LIKE '%' || :kw || '%' OR CAST(id AS TEXT) = :kw)")
@@ -126,6 +133,14 @@ def _totals(conn, adm: dict) -> dict:
         "SELECT COALESCE(SUM(amount), 0) AS s FROM charges"
         " WHERE admission_id = ? AND no_type IN ('预交款')", (adm["id"],),
     ).fetchone()["s"]
+    cost = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS s FROM charges"
+        " WHERE admission_id = ? AND no_type = '收费'", (adm["id"],),
+    ).fetchone()["s"]
+    settlement = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS s FROM charges"
+        " WHERE admission_id = ? AND no_type = '出院结算'", (adm["id"],),
+    ).fetchone()["s"]
     billed = conn.execute(
         "SELECT COALESCE(SUM(amount), 0) AS s FROM charges"
         " WHERE admission_id = ? AND no_type IN ('收费', '出院结算')", (adm["id"],),
@@ -150,6 +165,8 @@ def _totals(conn, adm: dict) -> dict:
     return {
         "deposits": round(deposits, 2),
         "billed": round(billed, 2),
+        "cost": round(cost, 2),
+        "settlement": round(settlement, 2),
         "refunds": round(refunds, 2),
         "pending": round(pending, 2),
         "balance": round(billed + pending - deposits + refunds, 2),

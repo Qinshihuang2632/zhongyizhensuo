@@ -12,6 +12,7 @@
         <el-tab-pane label="中药处方笺" name="prescription" />
         <el-tab-pane label="药品销售单" name="sale" />
         <el-tab-pane label="收费凭证" name="charge" />
+        <el-tab-pane label="出院汇总清单" name="discharge" />
       </el-tabs>
 
       <div class="bar">
@@ -29,11 +30,16 @@
         </el-table-column>
         <el-table-column prop="patient_name" label="患者" min-width="110" show-overflow-tooltip />
         <el-table-column label="金额" width="100">
-          <template #default="{ row }">¥ {{ (row.total ?? row.amount ?? 0).toFixed(2) }}</template>
+          <template #default="{ row }">{{ fmtMoney(row) }}</template>
         </el-table-column>
         <el-table-column v-if="tab !== 'charge'" prop="status" label="状态" width="90" />
         <el-table-column v-else prop="no_type" label="类型" width="90" />
-        <el-table-column prop="created_at" label="时间" width="160" />
+        <el-table-column label="时间" width="160">
+          <template #default="{ row }">{{ row.created_at || row.admitted_at }}</template>
+        </el-table-column>
+        <el-table-column v-if="tab === 'discharge'" label="出院时间" width="160">
+          <template #default="{ row }">{{ row.discharged_at || '—' }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
             <el-button size="small" type="primary" plain :icon="'Printer'" @click="printOne(row)">打印</el-button>
@@ -70,6 +76,7 @@ const conf = {
   prescription: { url: '/prescriptions', prefix: 'CF', template: 'prescription' },
   sale: { url: '/sales', prefix: 'XC', template: 'sale' },
   charge: { url: '/charges', prefix: 'SF', template: 'charge' },
+  discharge: { url: '/admissions', prefix: 'ZY', template: 'discharge', extra: '&status=' + encodeURIComponent('已出院') },
 }
 const prefix = computed(() => conf[tab.value].prefix)
 
@@ -77,6 +84,7 @@ async function load() {
   loading.value = true
   try {
     let url = `${conf[tab.value].url}?keyword=${encodeURIComponent(kw.value)}&page=${page.value}&size=${size}`
+    if (conf[tab.value].extra) url += conf[tab.value].extra
     if (dateRange.value?.length) url += `&start=${dateRange.value[0]}&end=${dateRange.value[1]}`
     const r = await api(url)
     items.value = r.items
@@ -86,6 +94,11 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+function fmtMoney(row) {
+  const v = row.total ?? row.amount
+  return v === undefined || v === null ? '—' : '¥ ' + Number(v).toFixed(2)
 }
 
 async function printOne(row) {
@@ -100,8 +113,25 @@ async function printOne(row) {
     } else if (tab.value === 'sale') {
       const d = await api(`/sales/${row.id}`)
       data = { sale: d, lines: d.lines }
-    } else {
+    } else if (tab.value === 'charge') {
       data = { c: await api(`/charges/${row.id}`) }
+    } else {
+      const d = await api(`/admissions/${row.id}`)
+      data = {
+        adm: d,
+        patient: d.patient || {},
+        treatments: d.treatments,
+        sales: d.sales,
+        prescriptions: d.prescriptions,
+        cost: d.cost,
+        settlement: d.settlement,
+        refunds: d.refunds,
+        billed: d.billed,
+        deposits: d.deposits,
+        balance: d.settlement,
+        discharge_orders: d.discharge_orders,
+        custom_orders: d.custom_orders || '',
+      }
     }
     const { html } = await api('/print/preview', { method: 'POST', body: { template: conf[tab.value].template, data } })
     printHtml.value = html
