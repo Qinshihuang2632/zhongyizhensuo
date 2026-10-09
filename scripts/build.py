@@ -20,7 +20,11 @@ EXE_NAME = "zhongyizhensuo"
 
 
 def build_installer(ver: str) -> Path:
-    """构建「一键安装.exe」并组装安装包文件夹与 zip。返回 zip 路径。"""
+    """构建「一键安装.exe」并组装安装包文件夹与 zip。返回 zip 路径。
+
+    安装包内置种子数据（诊所名称/管理密码/价格表），诊所首次安装即可直接登录使用；
+    升级安装时安装器会自动保留诊所已有的「数据」目录。
+    """
     subprocess.run(
         [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
          "--onefile", "--windowed", "--name", "一键安装",
@@ -33,6 +37,17 @@ def build_installer(ver: str) -> Path:
         shutil.rmtree(pkg_dir)
     content = pkg_dir / "安装内容"
     content.mkdir(parents=True)
+    # 种子数据库：预置诊所名称、管理密码与价格表
+    seed_db = ROOT / "dist" / ".seed_clinic.db"
+    subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "seed_delivery.py"),
+         "--out", str(seed_db)],
+        check=True, cwd=ROOT,
+    )
+    seed_data = content / "数据"
+    seed_data.mkdir()
+    shutil.copy2(seed_db, seed_data / "clinic.db")
+    seed_db.unlink(missing_ok=True)
     # 程序文件（不含「数据」）
     for item in (ROOT / "dist" / APP_NAME).iterdir():
         if item.name == "数据":

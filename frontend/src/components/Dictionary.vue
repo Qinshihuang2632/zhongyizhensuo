@@ -228,6 +228,19 @@ function openItem(row) {
 async function saveItem() {
   const f = itemForm.value
   if (!f.name || !f.name.trim()) return ElMessage.warning('请填写名称')
+  // 录入前查重：同名/名称相近且价格相近的条目禁止重复录入
+  try {
+    const q = `?name=${encodeURIComponent(f.name)}&price=${f.price || 0}` + (f.id ? `&exclude_id=${f.id}` : '')
+    const dup = await api('/items/duplicate-check' + q)
+    if (dup.duplicate) {
+      const it = dup.item
+      return ElMessage.error(
+        `疑似重复：已存在「${it.name}（${it.category}，${Number(it.price).toFixed(2)}元/${it.unit || '无单位'}）」，请勿重复录入；如需调价请用「修改」`,
+      )
+    }
+  } catch (e) {
+    return ElMessage.error(e.message)
+  }
   itemSaving.value = true
   try {
     const body = { ...f, category: tab.value }

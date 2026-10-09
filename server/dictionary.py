@@ -3,7 +3,10 @@
 - items 四类条目（中药饮片/中成药/西药/治疗项目）统一存放，划价、销售、
   库存都围绕 item id 展开；停用（active=0）后不可再被登记/开单。
 - 协定处方 = 自家定好的成方：整方价 + 药品组成。
+- 查重：名称去空格归一后相同、或名称包含且价格相近的条目禁止重复录入。
 """
+import re
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -13,6 +16,31 @@ router = APIRouter(prefix="/api")
 
 CATEGORIES = ("中药饮片", "中成药", "西药", "治疗项目")
 DRUG_CATEGORIES = ("中药饮片", "中成药", "西药")
+PRICE_CLOSE = 0.5  # 价格差在此之内视为"价格相近"
+
+
+def _norm_name(s: str) -> str:
+    """名称归一：去全部空白与常见分隔符后小写比较。"""
+    return re.sub(r"[\s·・、,，.。/\\\-—()（）]+", "", (s or "")).lower()
+
+
+def _find_duplicate(conn, name: str, price: float, exclude_id: int | None = None):
+    """查重：返回 (已有条目, 重复类型)；类型=同名/相似同名近价/相似。"""
+    norm = _norm_name(name)
+    if not norm:
+        return None, None
+    for r in conn.execute("SELECT * FROM items").fetchall():
+        if exclude_id and r["id"] == exclude_id:
+            continue
+        rn = _norm_name(r["name"])
+        if not rn:
+            continue
+        close = abs(r["price"] - price) <= PRICE_CLOSE
+        if rn == norm:
+            return r, ("同名" if close else "同名不同价")
+        if close and (norm in rn or rn in norm):
+            return r, "相似同名近价"
+    return None, None
 
 
 class ItemBody(BaseModel):
@@ -91,10 +119,35 @@ def list_items(category: str = "", keyword: str = "", active: int = -1,
     return {"total": total, "page": page, "size": size, "items": [_item_dict(r) for r in rows]}
 
 
+def _enforce_duplicate(conn, name: str, price: float, exclude_id: int | None = None) -> None:
+    row, kind = _find_duplicate(conn, name, price, exclude_id)
+    if row is None:
+        return
+    info = f"「{row['name']}（{row['category']}，{row['price']:.2f}元/{row['unit'] or '无单位'}，编号{row['id']:06d}）」"
+    if kind == "相似同名近价":
+        raise HTTPException(409, f"存在相近条目{info}，名称与价格相近，请勿重复录入")
+    if kind == "同名不同价":
+        raise HTTPException(409, f"已存在同名条目{info}；如需调整价格请改用列表中的「修改」功能")
+    raise HTTPException(409, f"已存在相同条目{info}，请勿重复录入")
+
+
+@router.get("/items/duplicate-check")
+def duplicate_check(name: str, price: float = 0, exclude_id: int = 0):
+    """录入前预检：返回是否命中查重及已有条目信息。"""
+    with db.connect() as conn:
+        row, kind = _find_duplicate(conn, name, price, exclude_id or None)
+    if row is None:
+        return {"duplicate": False}
+    return {"duplicate": True, "kind": kind,
+            "item": {"id": row["id"], "name": row["name"], "category": row["category"],
+                     "unit": row["unit"], "price": row["price"]}}
+
+
 @router.post("/items")
 def create_item(body: ItemBody):
     values = _clean_item(body)
     with db.tx() as conn:
+        _enforce_duplicate(conn, values[1], values[4])
         cur = conn.execute(
             "INSERT INTO items (category, name, unit, spec, price, cost, min_stock,"
             " manufacturer, note, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values,
@@ -116,6 +169,7 @@ def update_item(iid: int, body: ItemBody):
         raise HTTPException(404, "条目不存在")
     values = _clean_item(body)
     with db.tx() as conn:
+        _enforce_duplicate(conn, values[1], values[4], exclude_id=iid)
         conn.execute(
             "UPDATE items SET category=?, name=?, unit=?, spec=?, price=?, cost=?, min_stock=?,"
             " manufacturer=?, note=?, active=?, updated_at=datetime('now','localtime')"

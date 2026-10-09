@@ -37,18 +37,37 @@ def make_shortcut(target: Path) -> None:
                    check=False, creationflags=DETACHED)
 
 
+def _running_instance_exists() -> bool:
+    probe = subprocess.run(
+        ["tasklist", "/FI", "IMAGENAME eq zhongyizhensuo.exe"],
+        capture_output=True, text=True,
+    )
+    return "zhongyizhensuo.exe" in (probe.stdout or "").lower()
+
+
 def install(target: Path, with_shortcut: bool = True) -> None:
+    if _running_instance_exists():
+        raise RuntimeError("检测到「中医诊所管理系统」正在运行，请先完全退出系统再安装/升级")
     src = src_dir()
     if not (src / EXE).exists():
         raise FileNotFoundError(f"安装内容缺失（{EXE}），安装包不完整")
     target.mkdir(parents=True, exist_ok=True)
-    # 已有安装：只覆盖程序文件，绝不动「数据」目录（安装内容里本就不含数据）
+    # 已有安装（升级/重装）：只覆盖程序文件，绝不覆盖诊所已有的「数据」目录；
+    # 首次安装：带入安装包内置的种子数据（诊所名称/密码/价格表）
     for item in src.iterdir():
+        if item.name == "数据" and (target / "数据").is_dir():
+            continue
         dest = target / item.name
-        if item.is_dir():
-            shutil.copytree(item, dest, dirs_exist_ok=True)
-        else:
-            shutil.copy2(item, dest)
+        try:
+            if item.is_dir():
+                shutil.copytree(item, dest, dirs_exist_ok=True)
+            else:
+                shutil.copy2(item, dest)
+        except PermissionError:
+            raise RuntimeError(
+                f"复制 {item.name} 失败：目标文件正被占用。\n"
+                "请先完全退出「中医诊所管理系统」（含右下角托盘）后重试。"
+            )
     if with_shortcut:
         make_shortcut(target)
 
@@ -115,7 +134,18 @@ if __name__ == "__main__":
         i = args.index("--dir")
         target = Path(args[i + 1])
         silent = "--silent" in args
-        install(target, with_shortcut=not silent)
-        print("INSTALL_OK:", target)
+        try:
+            install(target, with_shortcut=not silent)
+            print("INSTALL_OK:", target)
+        except (RuntimeError, FileNotFoundError, PermissionError, shutil.Error) as e:
+            msg = str(e)
+            if silent:
+                print("INSTALL_FAILED:", msg)
+                sys.exit(1)
+            import tkinter.messagebox as mb
+            root = tk.Tk()
+            root.withdraw()
+            mb.showerror("安装/升级失败", msg)
+            sys.exit(1)
     else:
         gui()
